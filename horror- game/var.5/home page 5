@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>【起動ポータル】廃病院の怪異：漆黒 扉の深淵</title>
+    <style>
+        body {
+            background-color: #030303;
+            color: #dcdcdc;
+            font-family: 'Hiragino Mincho ProN', 'MS Mincho', 'Courier New', serif;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            user-select: none;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: rgba(10, 15, 12, 0.95);
+            border: 2px solid #ff3333;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.2);
+            padding: 30px;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #ff0000;
+            text-align: center;
+            font-size: 32px;
+            letter-spacing: 6px;
+            text-shadow: 0 0 15px #ff0000;
+            margin-bottom: 5px;
+        }
+        .version {
+            text-align: center;
+            color: #8a948f;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #ffaa00;
+            font-size: 18px;
+            border-bottom: 1px solid #ffaa00;
+            padding-bottom: 5px;
+            margin-top: 30px;
+            letter-spacing: 2px;
+        }
+        p, li {
+            font-size: 15px;
+            line-height: 1.8;
+            letter-spacing: 1px;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        .highlight {
+            color: #00ffaa;
+            font-weight: bold;
+        }
+        .warning-text {
+            color: #ff3366;
+            font-weight: bold;
+        }
+        .btn-container {
+            text-align: center;
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }
+        .launch-btn {
+            display: inline-block;
+            text-decoration: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #fff;
+            background: #111;
+            border: 2px solid #ff3333;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            letter-spacing: 4px;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.2);
+        }
+        .launch-btn:hover {
+            background: #ff3333;
+            color: #000;
+            box-shadow: 0 0 25px #ff3333;
+            transform: scale(1.03);
+        }
+        .footer {
+            text-align: center;
+            font-size: 11px;
+            color: #555;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>廃病院の怪異：漆黒 扉の深淵</h1>
+        <div class="version">画像同期恐怖再現版 v11 (Official Portal)</div>
+
+        <h2>👁️ 概要</h2>
+        <p>
+            本作は、暗闇に包まれた廃病院を探索する3Dホラー脱出ゲームです。各階層に隠された「日記」を回収し、無事にスタート地点の緑の枠線まで生還することが目的です。最下層（3階）では、歪んだ白き輪郭と漆黒の眼窩を持つ最悪の怪異があなたを追い詰めます。
+        </p>
+
+        <h2>🎮 操作方法</h2>
+        <ul>
+            <li><span class="highlight">W, A, S, D</span> ： 前後左右への移動</li>
+            <li><span class="highlight">マウス移動</span> ： 視点変更（周囲を見渡す）</li>
+            <li><span class="highlight">Shiftキー (長押し)</span> ： 全力疾走（スタミナを消費）</li>
+            <li><span class="highlight">Qキー</span> ： 懐中電灯の ON / OFF</li>
+            <li><span class="highlight">Eキー</span> ： 棚やクローゼットの扉を 開ける / 閉める</li>
+            <li><span class="highlight">Spaceキー</span> ： 開いた家具の中に 隠れる / 隠れ場所から出る</li>
+            <li><span class="highlight">Fキー</span> ： 家具の中に落ちているアイテムを拾う</li>
+            <li><span class="highlight">Enterキー</span> ： 拾ったアイテムを即座に使用する</li>
+            <li><span class="highlight">Mキー (長押し)</span> ： ミニマップを画面中央に拡大表示</li>
+        </ul>
+
+        <h2>⚠️ 潜入時の注意書き</h2>
+        <ul>
+            <li><span class="warning-text">完全停電とライト故障：</span> 定期的に病院全体の非常灯が消える「完全停電」が発生します。また、懐中電灯が一時的に故障して点滅することもあります。</li>
+            <li><span class="warning-text">隠れる時のリスク：</span> 怪異が近くにいる時にダッシュすると、プレイヤーの「息づかい」が荒くなり、家具の中に隠れていても見つかる確率が跳ね上がります。気配を消すにはライトを消し、歩いて移動してください。</li>
+            <li><span class="warning-text">呪いのアイテム罠：</span> 家具の中には加速や透明化をもたらすオーブが落ちていますが、中には移動速度が極端に落ちる（鈍足）、あるいは強烈な発光で怪異を強制誘引する（位置発覚）といった「偽物（罠）」がランダムで混ざっています。</li>
+            <li><span class="warning-text">魂のタイピング解錠：</span> 日記を回収して脱出地点に戻ると、出口の鍵を外すための「タイピング解錠システム」が作動します。表示される恐怖のフレーズを正確に入力しなければ脱出できません。</li>
+        </ul>
+
+        <div class="btn-container">
+            <!-- リンク先を「ホラゲーvar.5.html」に修正しました -->
+            <a href="ホラゲーvar.5.html" class="launch-btn">深淵のゲームを起動する</a>
+        </div>
+    </div>
+
+    <div class="footer">
+        ※ ゲームをプレイするには、同一フォルダ内に「ホラゲーvar.5.html」が存在している必要があります。
+    </div>
+
+</body>
+</html>
