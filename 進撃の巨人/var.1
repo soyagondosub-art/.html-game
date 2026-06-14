@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>進撃の巨人 - アルティメット・サバイバル完全版</title>
+    <style>
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            background-color: #87ceeb; font-family: 'Helvetica Neue', Arial, sans-serif; user-select: none;
+        }
+        #canvas-container { 
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; 
+            background: linear-gradient(180deg, #b0e2ff 0%, #def2ff 100%);
+        }
+        #ui {
+            position: absolute; top: 20px; left: 20px; color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.9); font-size: 15px; pointer-events: none;
+            background: rgba(15, 10, 10, 0.9); padding: 20px; border-radius: 12px; border: 2px solid rgba(255,100,100,0.2); z-index: 10;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+        }
+        .bar-label { font-weight: bold; font-size: 13px; margin-bottom: 2px; letter-spacing: 1px; }
+        .bar { width: 240px; height: 12px; border: 1px solid rgba(255,255,255,0.6); margin: 2px 0 14px 0; background: #222; border-radius: 4px; overflow: hidden; }
+        .fill { height: 100%; width: 100%; transition: width 0.04s ease-out; }
+        #hp-fill { background: linear-gradient(90deg, #ff3333, #ff6666); }
+        #sanity-fill { background: linear-gradient(90deg, #9c27b0, #ba68c8); }
+        #gas-fill { background: linear-gradient(90deg, #00bfff, #33ccff); }
+        #blade-fill { background: linear-gradient(90deg, #e6e6e6, #b0bec5); }
+        #score-board { font-size: 28px; font-weight: bold; color: #ffcc00; margin-bottom: 8px; }
+        #combo-alert { font-size: 28px; font-weight: bold; color: #fff; font-style: italic; display: none; text-shadow: 0 0 15px #ff1111; }
+        #fear-overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: radial-gradient(circle, rgba(255,0,0,0) 40%, rgba(150,0,0,0.7) 100%); pointer-events: none; display: none; z-index: 5; }
+        #panic-overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: radial-gradient(circle, rgba(156,39,176,0) 30%, rgba(156,39,176,0.5) 100%); pointer-events: none; display: none; z-index: 4; }
+        #reload-overlay { position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%); color: #ffcc00; font-size: 26px; font-weight: bold; background: rgba(0,0,0,0.85); padding: 15px 30px; border-radius: 8px; border: 2px solid #ffcc00; display: none; z-index: 10; }
+        
+        #crosshair { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,0,0,0.75); font-size: 32px; font-weight: bold; pointer-events: none; z-index: 10; }
+        #death-screen {
+            position: absolute; top:0; left:0; width:100vw; height:100vh;
+            background-color: #1a0505; opacity: 0; pointer-events: none; z-index: 999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            color: #fff; font-size: 36px; font-weight: bold; letter-spacing: 8px; transition: opacity 0.8s ease-in;
+        }
+        #death-screen span { color: #ff2222; font-size: 54px; margin-top: 20px; text-shadow: 0 0 25px #ff0000; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+    <div id="death-screen">世界は残酷だ...<span>捕 食 完 了</span></div>
+    <div id="reload-overlay">ブレード換刃 ＆ ガス充填中...</div>
+    <div id="fear-overlay"></div>
+    <div id="panic-overlay"></div>
+
+    <div id="ui">
+        <div id="score-board">駆逐数: <span id="score">0</span></div>
+        <div class="bar-label">生存シグナル (HP)</div><div class="bar"><div id="hp-fill" class="fill"></div></div>
+        <div class="bar-label" style="color: #ba68c8;">精神状態度 (0で窒息ダメージ)</div><div class="bar"><div id="sanity-fill" class="fill"></div></div>
+        <div class="bar-label">ガス残量 (地上静止時回復)</div><div class="bar"><div id="gas-fill" class="fill"></div></div>
+        <div class="bar-label">ブレード鋭利度</div><div class="bar"><div id="blade-fill" class="fill"></div></div>
+        <div id="combo-alert">目標完全駆逐！</div>
+    </div>
+
+    <div id="crosshair">＋</div>
+
+<script>
+let scene, camera, renderer, clock;
+let playerMesh, pVelocity = new THREE.Vector3(), isGrounded = false;
+let objectsToHook = []; 
+let titans = [];
+let particles = [];
+let medkits = []; 
+let score = 0;
+
+let audioCtx = null;
+let stats = { hp: 100, sanity: 100, gas: 100, blade: 100 };
+let keys = { w:false, a:false, s:false, d:false, space:false, g:false, r:false, shift:false };
+
+let isReloading = false;
+let reloadTimer = 0;
+let shakeIntensity = 0; 
+let attackAnimateTimer = 0;   
+let isDead = false;
+let fearTimer = 0; 
+let mikasaRescueCooldown = 0;
+
+// 【爽快感】スローモーションシステム用
+let gameSpeed = 1.0; 
+let slowMoTimer = 0; 
+
+let cameraPitch = 0.08;
+let cameraYaw = 0;
+let cameraRadius = 18; 
+
+let isWireActive = false;
+let wireTargetLocal = new THREE.Vector3(); 
+let leftWireLine, rightWireLine, anchorMesh; 
+
+window.onload = function() { init(); };
+
+function initAudio() { if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } }
+
+function playWireSound() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator(); let gain = audioCtx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(750, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.4);
+    gain.gain.setValueAtTime(0.6, audioCtx.currentTime);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+}
+
+function playSlashSound() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator(); let gain = audioCtx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.7, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+}
+
+function playExplosionSound() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator(); let gain = audioCtx.createGain();
+    osc.type = 'triangle'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(10, audioCtx.currentTime + 0.8);
+    gain.gain.setValueAtTime(1.8, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.8);
+}
+
+function init() {
+    const container = document.getElementById('canvas-container');
+    if (!container) return; 
+
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0xcce0ff, 0.0015); 
+    clock = new THREE.Clock();
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0xb0e2ff, 1); 
+    container.appendChild(renderer.domElement);
+
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+
+    createPlayer();
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9); scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xfffaed, 0.8); dirLight.position.set(400, 600, 200); scene.add(dirLight);
+
+    const floorGeo = new THREE.PlaneGeometry(8000, 8000);
+    const floorMat = new THREE.MeshLambertMaterial({ color: 0x55a630 }); 
+    const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+
+    createStage();
+
+    for(let i=0; i<15; i++) { spawnTitan(); }
+
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const wireGeo = new THREE.CylinderGeometry(0.08, 0.08, 1, 4); 
+    leftWireLine = new THREE.Mesh(wireGeo, wireMat); rightWireLine = new THREE.Mesh(wireGeo, wireMat);
+    leftWireLine.visible = rightWireLine.visible = false; scene.add(leftWireLine); scene.add(rightWireLine);
+
+    anchorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshBasicMaterial({ color: 0x555555 }));
+    anchorMesh.visible = false; scene.add(anchorMesh);
+
+    window.addEventListener('resize', onWindowResize);
+    document.addEventListener('keydown', (e) => handleKey(e, true));
+    document.addEventListener('keyup', (e) => handleKey(e, false));
+    renderer.domElement.addEventListener('click', () => { if (isDead) return; initAudio(); renderer.domElement.requestPointerLock(); });
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mousedown', launchWire);
+    document.addEventListener('mouseup', releaseWire);
+
+    animate();
+}
+
+function createPlayer() {
+    playerMesh = new THREE.Group();
+    cloakMesh = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.2, 0.5), new THREE.MeshLambertMaterial({ color: 0x2e7d32 })); cloakMesh.position.set(0, 1.8, -0.1); playerMesh.add(cloakMesh);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.5, 0.6), new THREE.MeshLambertMaterial({ color: 0x5d4037 })); body.position.y = 1.8; playerMesh.add(body);
+    const headGroup = new THREE.Group();
+    headGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshLambertMaterial({ color: 0xffe0bd })));
+    hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.25, 0.76), new THREE.MeshLambertMaterial({ color: 0x212121 })); hairMesh.position.y = 0.3; headGroup.add(hairMesh);
+    headMesh = headGroup; headMesh.position.y = 2.8; playerMesh.add(headMesh);
+    leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.1, 0.25), new THREE.MeshLambertMaterial({ color: 0x5d4037 })); leftArm.position.set(-0.8, 1.9, 0); playerMesh.add(leftArm);
+    rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.1, 0.25), new THREE.MeshLambertMaterial({ color: 0x5d4037 })); rightArm.position.set(0.8, 1.9, 0); playerMesh.add(rightArm);
+    const bladeGeo = new THREE.BoxGeometry(0.04, 0.08, 2.5); const bladeMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0 });
+    leftBlade = new THREE.Mesh(bladeGeo, bladeMat); leftBlade.position.set(0, -0.5, -0.5); leftBlade.rotation.x = Math.PI / 2; leftArm.add(leftBlade);
+    rightBlade = new THREE.Mesh(bladeGeo, bladeMat); rightBlade.position.set(0, -0.5, 0.5); rightBlade.rotation.x = -Math.PI / 2; rightArm.add(rightBlade);
+    playerMesh.position.set(0, 0, 150); scene.add(playerMesh);
+}
+
+function createStage() {
+    const buildingGeo = new THREE.BoxGeometry(35, 100, 35);
+    const buildingMat = new THREE.MeshStandardMaterial({ color: 0xd7ccc8, roughness: 0.8 }); 
+    for(let i=0; i<65; i++) {
+        const bX = (Math.random()-0.5)*1500; const bZ = (Math.random()-0.5)*1500;
+        const building = new THREE.Mesh(buildingGeo, buildingMat); building.position.set(bX, 50, bZ); scene.add(building);
+        objectsToHook.push({ mesh: building, sizeX: 35, sizeZ: buildingGeo.parameters.depth, height: buildingGeo.parameters.height, active: true });
+        if (Math.random() < 0.3) {
+            const kitGroup = new THREE.Group();
+            kitGroup.add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.2, 1.2), new THREE.MeshStandardMaterial({ color: 0xeeeeee })));
+            const glow = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00ff33, transparent: true, opacity: 0.5 })); kitGroup.add(glow);
+            kitGroup.position.set(bX, 101, bZ); scene.add(kitGroup);
+            medkits.push({ mesh: kitGroup, glow: glow, rotationSpeed: 0.02 + Math.random()*0.02 });
+        }
+    }
+}
+
+function spawnTitan() {
+    const group = new THREE.Group();
+    const sizeScale = 0.8 + Math.random() * 1.5; 
+    const isAbnormal = Math.random() < 0.20; 
+    
+    const rollSpecial = Math.random();
+    let subtype = 'normal'; bodyColor = isAbnormal ? 0x901a1e : 0xd38a8a; unajiHP = isAbnormal ? 2 : 1; 
+
+    if (rollSpecial < 0.07) { subtype = 'warhammer'; bodyColor = 0xeeeeee; unajiHP = 2; } 
+    else if (rollSpecial < 0.14) { subtype = 'armored'; bodyColor = 0xffd54f; unajiHP = 3; }
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(7.0 * sizeScale, 15 * sizeScale, 6.0 * sizeScale), new THREE.MeshLambertMaterial({ color: bodyColor })); body.position.y = 7.5 * sizeScale; group.add(body);
+    const armMat = new THREE.MeshLambertMaterial({ color: bodyColor });
+    const leftArmMesh = new THREE.Mesh(new THREE.BoxGeometry(1.6 * sizeScale, 11.0 * sizeScale, 1.6 * sizeScale), armMat); leftArmMesh.position.set(-4.3 * sizeScale, 9.0 * sizeScale, 0); group.add(leftArmMesh);
+    const rightArmMesh = new THREE.Mesh(new THREE.BoxGeometry(1.6 * sizeScale, 11.0 * sizeScale, 1.6 * sizeScale), armMat); rightArmMesh.position.set(4.3 * sizeScale, 9.0 * sizeScale, 0); group.add(rightArmMesh);
+
+    if (subtype === 'warhammer') { 
+        const weaponMesh = new THREE.Group();
+        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * sizeScale, 0.5 * sizeScale, 20 * sizeScale, 8), armMat); handle.position.y = 8 * sizeScale; weaponMesh.add(handle);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(5 * sizeScale, 7 * sizeScale, 5 * sizeScale), armMat); head.position.y = 18 * sizeScale; weaponMesh.add(head);
+        weaponMesh.position.set(0, -6 * sizeScale, 0); weaponMesh.rotation.x = Math.PI / 2; rightArmMesh.add(weaponMesh);
+    }
+
+    const headGroup = new THREE.Group();
+    headGroup.add(new THREE.Mesh(new THREE.BoxGeometry(6.0 * sizeScale * 1.1, 6.0 * sizeScale * 1.1, 6.0 * sizeScale * 1.1), new THREE.MeshLambertMaterial({ color: isAbnormal ? 0xb75030 : 0xeaa590 })));
+    headGroup.position.y = 17.0 * sizeScale; group.add(headGroup);
+    const unaji = new THREE.Mesh(new THREE.BoxGeometry(2.4 * sizeScale, 2.4 * sizeScale, 0.4 * sizeScale), new THREE.MeshBasicMaterial({ color: 0xaa0000 })); unaji.position.set(0, 14.5 * sizeScale, -3.1 * sizeScale); group.add(unaji);
+    group.position.set((Math.random()-0.5)*1400, 0, (Math.random()-0.5)*1400); scene.add(group);
+
+    titans.push({ mesh: group, bodyMesh: body, unaji: unaji, alive: true, dying: false, dieTimer: 0, scale: sizeScale, type: isAbnormal ? 'abnormal' : 'normal', subtype: subtype, hp: unajiHP, speed: (0.07 + Math.random() * 0.08) * (isAbnormal ? 4.0 : 1.0) * (subtype !== 'normal' ? 1.4 : 1.0), swingSeed: Math.random() * 10, isDown: false, downTimer: 0 });
+}
+
+function handleKey(e, isDown) {
+    if (isDead) return; 
+    const k = e.code;
+    if (k === 'KeyW') keys.w = isDown; if (k === 'KeyS') keys.s = isDown;
+    if (k === 'KeyA') keys.a = isDown; if (k === 'KeyD') keys.d = isDown;
+    if (k === 'Space') keys.space = isDown; if (k === 'ShiftLeft' || k === 'ShiftRight') keys.shift = isDown;
+    
+    if (k === 'Space' && isDown && !isReloading && stats.blade > 0) attackAnimateTimer = 10;
+
+    if ((k === 'ShiftLeft' || k === 'ShiftRight') && isDown && !isGrounded && stats.gas > 8 && !isReloading) {
+        stats.gas -= 8; playWireSound(); shakeIntensity = 1.0;
+        pVelocity.addScaledVector(new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw).normalize(), 1.2);
+        pVelocity.y += 0.15; createParticles(playerMesh.position, 0xffffff, 25); 
+    }
+    
+    if (k === 'KeyR' && isDown && isGrounded && !isReloading) {
+        isReloading = true; reloadTimer = 100; pVelocity.set(0, 0, 0); releaseWire(); document.getElementById('reload-overlay').style.display = 'block';
+    }
+}
+
+function launchWire(e) {
+    if (isDead || keys.space || fearTimer > 0 || isReloading) return; 
+    if (e.button !== 0 || stats.gas <= 0 || document.pointerLockElement !== renderer.domElement) return;
+    const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(new THREE.Vector2(0, 0.1), camera);
+    let meshList = []; objectsToHook.forEach(o => meshList.push(o.mesh)); titans.forEach(t => { if(t.alive && !t.dying) meshList.push(t.bodyMesh); });
+    const intersects = raycaster.intersectObjects(meshList, true);
+    if (intersects.length > 0 && intersects[0].distance < 800) {
+        isWireActive = true; playWireSound();
+        const hitPoint = intersects[0].point;
+        let hitObject = intersects[0].object; let rootMesh = hitObject; while (rootMesh.parent && rootMesh.parent !== scene) rootMesh = rootMesh.parent;
+        const foundTitan = titans.find(t => t.bodyMesh === hitObject || t.mesh === rootMesh);
+        if (foundTitan) { 
+            if (foundTitan.subtype === 'armored' && Math.random() < 0.7) { releaseWire(); shakeIntensity = 0.8; return; }
+            wireTargetLocal.copy(hitPoint).sub(foundTitan.mesh.position);
+        } else { wireTargetLocal.copy(hitPoint); }
+        pVelocity.addScaledVector(new THREE.Vector3().subVectors(hitPoint, playerMesh.position).normalize(), 0.65);
+    }
+}
+
+function releaseWire() { isWireActive = false; leftWireLine.visible = rightWireLine.visible = false; }
+
+function onMouseMove(e) {
+    if (isDead || isReloading) return; 
+    if (document.pointerLockElement === renderer.domElement) {
+        cameraYaw -= e.movementX * 0.0025;
+        cameraPitch += e.movementY * 0.0025; 
+        cameraPitch = Math.max(-Math.PI / 3.2, Math.min(Math.PI / 2.5, cameraPitch));
+    }
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    const deltaTime = clock.getDelta(); 
+
+    if (slowMoTimer > 0) { slowMoTimer -= 1; gameSpeed = 0.1; } else { gameSpeed = 1.0; mikasaRescueCooldown -= 1; }
+    const dt = deltaTime * 60 * gameSpeed; 
+
+    if (isDead) { deathTimer += 1; renderer.render(scene, camera); return; }
+
+    if (typeof isTitanForm === 'undefined' || !isTitanForm) pVelocity.y -= 0.016 * dt;
+
+    if (isWireActive && stats.gas > 0 && fearTimer <= 0) {
+        let worldTargetPos = wireTargetLocal.clone(); 
+        let dir = new THREE.Vector3().subVectors(worldTargetPos, playerMesh.position).normalize();
+        pVelocity.addScaledVector(dir, 0.25 * dt); stats.gas -= 0.22 * dt; 
+        
+        let lH = new THREE.Vector3(-0.5, 1.5, 0).applyQuaternion(playerMesh.quaternion).add(playerMesh.position);
+        let rH = new THREE.Vector3(0.5, 1.5, 0).applyQuaternion(playerMesh.quaternion).add(playerMesh.position);
+        drawSingleWire(leftWireLine, lH, worldTargetPos); drawSingleWire(rightWireLine, rH, worldTargetPos);
+    } else { leftWireLine.visible = rightWireLine.visible = false; }
+
+    if (isReloading) {
+        reloadTimer -= dt; if (reloadTimer <= 0) { stats.gas = 100; stats.blade = 100; isReloading = false; document.getElementById('reload-overlay').style.display = 'none'; }
+    } else if (stats.hp < 100 && stats.sanity > 0) { stats.hp = Math.min(100, stats.hp + 0.015 * dt); } 
+
+    if (isGrounded && !isWireActive && !keys.space) { pVelocity.x *= Math.pow(0.85, dt); pVelocity.z *= Math.pow(0.85, dt); } 
+    else { pVelocity.x *= Math.pow(0.97, dt); pVelocity.z *= Math.pow(0.97, dt); }
+    playerMesh.position.addScaledVector(pVelocity, dt);
+    if (playerMesh.position.y < 0) { playerMesh.position.y = 0; pVelocity.y = 0; isGrounded = true; } else { isGrounded = false; }
+    playerMesh.rotation.y = cameraYaw;
+
+    let nearTitan = false;
+    titans.forEach((titan) => {
+        if (!titan.alive) {
+            if (titan.dying) { titan.dieTimer += dt; titan.mesh.rotation.x += 0.06 * dt; titan.mesh.position.y -= 0.18 * dt; if (titan.dieTimer > 40) { scene.remove(titan.mesh); titan.dying = false; } }
+            return;
+        }
+        let minDist = titan.mesh.position.distanceTo(playerMesh.position);
+        if (minDist < 50.0 && !isDead) nearTitan = true;
+
+        if (titan.isDown) { titan.downTimer -= dt; if (titan.downTimer <= 0) titan.isDown = false; } 
+        else {
+            titan.swingSeed += 0.14 * dt;
+            let armFreq = titan.type === 'abnormal' ? 2.8 : 1.0;
+            titan.mesh.children[1].rotation.x = Math.sin(titan.swingSeed * armFreq) * 0.9; 
+            titan.mesh.children[2].rotation.x = -Math.sin(titan.swingSeed * armFreq) * 0.9;
+
+            let tDir = new THREE.Vector3().subVectors(playerMesh.position, titan.mesh.position); tDir.y = 0; tDir.normalize();
+            if (titan.type === 'abnormal') { let wave = new THREE.Vector3(-tDir.z, 0, tDir.x).normalize().multiplyScalar(Math.sin(titan.swingSeed * 2.5) * 1.5); tDir.add(wave).normalize(); }
+            titan.mesh.position.addScaledVector(tDir, titan.speed * dt); titan.mesh.lookAt(titan.mesh.position.x + tDir.x, titan.mesh.position.y, titan.mesh.position.z + tDir.z);
+
+            let absoluteHitRange = (4.5 * titan.scale) + (titan.subtype !== 'normal' ? 5.5 : 0) + 1.2; 
+            if (minDist < absoluteHitRange && !isWireActive) {
+                stats.hp -= 100; 
+                if (stats.hp <= 0 && !isDead) {
+                    isDead = true; releaseWire(); document.exitPointerLock();
+                }
+            }
+
+            let titanForward = new THREE.Vector3(0, 0, 1).applyQuaternion(titan.mesh.quaternion).normalize();
+            if (minDist < 45 && titanForward.angleTo(new THREE.Vector3().subVectors(playerMesh.position, titan.mesh.position).normalize()) < 0.6) { fearTimer = 60; shakeIntensity = 2.5; releaseWire(); }
+        }
+
+        if (attackAnimateTimer > 0) { 
+            let unajiWorldPos = new THREE.Vector3(); titan.unaji.getWorldPosition(unajiWorldPos);
+            if (playerMesh.position.distanceTo(unajiWorldPos) < 22) {
+                if (titan.subtype === 'armored') { stats.blade -= 35; if(titan.hp > 1) { shakeIntensity = 1.0; titan.hp--; attackAnimateTimer=0; return; } } 
+                titan.alive = false; titan.dying = true;
+                
+                score += (titan.subtype !== 'normal' ? 5 : 1);
+                document.getElementById('score').innerText = score;
+                stats.sanity = Math.min(100, stats.sanity + 25); 
+                
+                playSlashSound(); playExplosionSound();
+                createParticles(unajiWorldPos, 0xff1111, 150, true); 
+                shakeIntensity = 3.5; slowMoTimer = 60; 
+                pVelocity.y = 0.4;
+                attackAnimateTimer = 0; releaseWire();
+                const alert = document.getElementById('combo-alert'); alert.style.display = 'block'; setTimeout(() => alert.style.display = 'none', 600);
+            }
+        }
+    });
+
+    if (attackAnimateTimer > 0) { attackAnimateTimer -= dt; playerMesh.rotation.z = Math.sin(attackAnimateTimer*0.5) * 10; leftArm.rotation.x = Math.PI/2; rightArm.rotation.x = Math.PI/2; } 
+    else { playerMesh.rotation.z = 0; leftArm.rotation.x = 0; rightArm.rotation.x = 0; }
+
+    if (particles.length > 0) particles = particles.filter(p => { p.mesh.position.addScaledVector(p.velocity, dt); p.life -= dt; p.mesh.material.opacity = p.life / 22; if (p.life <= 0) { scene.remove(p.mesh); return false; } return true; });
+    
+    if (nearTitan) { stats.sanity = Math.max(0, stats.sanity - 0.45 * dt); } else { if (stats.sanity < 100) stats.sanity = Math.min(100, stats.sanity + 0.15 * dt); }
+    if (stats.sanity <= 0) { stats.hp -= 0.12 * dt; document.getElementById('panic-overlay').style.display = 'block'; } else { document.getElementById('panic-overlay').style.display = 'none'; }
+    if (stats.hp <= 0 && !isDead) { isDead = true; releaseWire(); location.reload(); }
+
+    medkits.forEach((kit, i) => { kit.mesh.rotation.y += kit.rotationSpeed * dt; kit.glow.material.opacity = 0.4 + Math.sin(kit.rotationSpeed*10 + clock.elapsedTime*5)*0.2; if (kit.mesh.position.distanceTo(playerMesh.position) < 5.0) { stats.hp = Math.min(100, stats.hp + 40); playExplosionSound(); scene.remove(kit.mesh); medkits.splice(i, 1); shakeIntensity = 0.3; } });
+
+    let finalRadius = cameraRadius + (mikasaRescueCooldown>0 ? 10 : 0);
+    camera.position.set(playerMesh.position.x + Math.sin(cameraYaw)*finalRadius*Math.cos(cameraPitch), playerMesh.position.y + Math.sin(cameraPitch)*finalRadius + 2.0, playerMesh.position.z + Math.cos(cameraYaw)*finalRadius*Math.cos(cameraPitch));
+    if (shakeIntensity > 0.1) { camera.position.x += (Math.random()-0.5)*shakeIntensity; camera.position.y += (Math.random()-0.5)*shakeIntensity; camera.position.z += (Math.random()-0.5)*shakeIntensity; shakeIntensity *= Math.pow(0.88, dt); }
+    camera.lookAt(playerMesh.position.x, playerMesh.position.y + 2.2, playerMesh.position.z);
+
+    if (document.getElementById('hp-fill')) document.getElementById('hp-fill').style.width = Math.max(0, stats.hp) + '%';
+    if (document.getElementById('sanity-fill')) document.getElementById('sanity-fill').style.width = Math.max(0, stats.sanity) + '%';
+    if (document.getElementById('gas-fill')) document.getElementById('gas-fill').style.width = Math.max(0, stats.gas) + '%';
+    if (document.getElementById('blade-fill')) document.getElementById('blade-fill').style.width = Math.max(0, stats.blade) + '%';
+    
+    renderer.render(scene, camera);
+}
+
+function drawSingleWire(w, s, e) { let d = s.distanceTo(e); w.position.copy(s).add(e).multiplyScalar(0.5); w.scale.set(1, d, 1); w.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3().subVectors(e, s).normalize()); w.visible = true; }
+function createParticles(p, c, count, exp=false) { for (let i=0; i<count; i++) { const m = new THREE.Mesh(exp?new THREE.SphereGeometry(1.2,6,6):new THREE.BoxGeometry(0.6,0.6,0.6),new THREE.MeshBasicMaterial({color:c,transparent:true})); m.position.copy(p); const v = new THREE.Vector3((Math.random()-0.5)*(exp?7:3),(Math.random()-0.3)*(exp?7:3),(Math.random()-0.5)*(exp?7:3)); scene.add(m); particles.push({mesh:m,velocity:v,life:exp?35:22}); } }
+function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+</script>
+</body>
+</html>
