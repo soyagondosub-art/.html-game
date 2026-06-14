@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>HOSPITAL LABYRINTH: INSANE HORROR VER</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        #ui-layer {
+            position: absolute; top: 20px; left: 20px; 
+            color: #fff; background: rgba(10, 15, 10, 0.9); 
+            padding: 20px; border-radius: 5px; border: 2px solid #ff3333;
+            font-size: 14px; line-height: 1.8; z-index: 100;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+            pointer-events: none;
+        }
+        #floor-display { font-size: 18px; font-weight: bold; color: #ff3333; }
+        
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #050505; display: flex; justify-content: center; align-items: center;
+            flex-direction: column; z-index: 300; color: white; text-align: center;
+        }
+        #screen-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            z-index: 200; display: none; text-shadow: 0 0 10px #000; color: white;
+        }
+        .btn { margin-top:20px; padding:12px 30px; font-size:18px; cursor:pointer; background:#111; color:#ff3333; border:2px solid #ff3333; border-radius:4px; font-weight:bold; }
+        .btn:hover { background:#ff3333; color:#000; box-shadow: 0 0 15px #ff3333; }
+        
+        #minimap-container {
+            position: absolute; top: 20px; right: 20px;
+            width: 150px; height: 150px; 
+            background: rgba(0, 5, 0, 0.9);
+            border: 2px solid #ff3333;
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 150;
+        }
+        #minimap { width: 100%; height: 100%; }
+
+        #diary-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.95); display: none; justify-content: center;
+            align-items: center; flex-direction: column; z-index: 250;
+        }
+        #diary-box {
+            background: #0a0a0a; border: 2px solid #ff3333; padding: 30px;
+            max-width: 550px; width: 80%; border-radius: 6px;
+            box-shadow: 0 0 25px rgba(255, 0, 0, 0.4); line-height: 1.8;
+            font-family: 'Hiragino Mincho ProN', 'MS Mincho', serif;
+        }
+        #diary-content { white-space: pre-wrap; font-size: 16px; color: #e0e0e0; letter-spacing: 1px; }
+        
+        #guide-notice {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            color: #ffaa44; font-size: 14px; font-weight: bold; z-index: 100; text-align: center; 
+            background: rgba(0,0,0,0.85); padding: 10px 20px; border-radius: 4px; border: 1px solid #ffaa44;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen">
+        <h1 style="color: #ff0000; font-size: 38px; letter-spacing: 8px; margin-bottom: 10px; text-shadow: 0 0 20px #ff0000;">廃病院の怪異：絶叫</h1>
+        <p style="color: #bbb; font-size: 14px; margin-bottom: 5px;">【操作修正版】勝手に視点が回るバグを修正しました！</p>
+        <p style="color: #888; font-size: 12px;">※ゲーム開始後、画面をクリックするとマウスで視点が動かせるようになります。</p>
+        <button id="start-btn" class="btn">病院に潜入する</button>
+    </div>
+
+    <div id="ui-layer">
+        <span id="floor-display">【現在位置: 廃病院 1階】</span><br>
+        迷路の奥にある<span style="color:#ffff00;font-weight:bold;">「友人の日記」</span>を拾い、<br>
+        スタート地点（光の柱）まで生きて戻れ。<br><br>
+        移動: <span style="color:#00ff00;font-weight:bold;">W, A, S, D</span>（前後・左右カニ歩き）<br>
+        視点操作: <span style="color:#00ffff;font-weight:bold;">マウスを動かすだけ</span><br>
+        <span style="color:#aaa;font-size:12px;">※視点が動かない時は画面を一度クリック！</span>
+    </div>
+
+    <div id="guide-notice">【操作快適化】マウスの動きに連動して視点が回ります。勝手には回りません。</div>
+
+    <div id="minimap-container">
+        <canvas id="minimap"></canvas>
+    </div>
+
+    <div id="diary-overlay">
+        <div id="diary-box">
+            <div id="diary-content"></div>
+        </div>
+        <button id="diary-close-btn" class="btn" style="color:#00ff00; border-color:#00ff00;">日記を閉じて脱出する</button>
+    </div>
+
+    <div id="screen-overlay">
+        <div id="msg" style="font-size: 32px; font-weight: bold; text-align: center; padding: 0 20px;"></div>
+        <button id="action-btn" class="btn" style="color:#fff; border-color:#fff;">進む</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- 迷路マップデータ ---
+        const mazes = {
+            1: [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+                [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
+                [1,0,1,0,0,0,1,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,1,1,0,1,1,1,0,1,1,1,0,1,0,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+                [1,0,1,1,1,0,1,1,1,0,1,1,1,1,1],
+                [1,0,1,0,0,0,1,0,1,0,0,0,0,0,1],
+                [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1],
+                [1,0,1,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            2: [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1],
+                [1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0,1,0,0,0,1],
+                [1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
+                [1,1,1,0,1,1,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,0,1],
+                [1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,0,0,1],
+                [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,1,1],
+                [1,0,1,0,1,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,1],
+                [1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
+                [1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,0,1],
+                [1,0,0,0,1,0,0,0,1,0,0,0,1,0,1,0,1,0,0,0,1],
+                [1,0,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1],
+                [1,0,1,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            3: [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+                [1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],
+                [1,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1],
+                [1,1,1,0,1,1,1,0,1,0,1,0,1,0,1,1,1,0,1,1,1],
+                [1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1],
+                [1,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
+                [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],
+                [1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+                [1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,0,1],
+                [1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,1,0,1],
+                [1,0,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ]
+        };
+
+        const diaryTexts = {
+            1: `【栄小学校5-1 ゆうせいの手帳：1階】\n\nサナエちゃんが最後に「古い病院でお化けを見た」って言ってた。\n僕は今日、一人でこの廃病院を調べてみる。\nもし迷子になってるなら、僕が助けてヒーローになってやるんだ。\n◯◯、もし僕が明日学校に来なかったら、この病院を探してくれよな。`,
+            2: `【栄小学校5-1 ゆうせいの手帳：2階】\n\n間違いだった。来るんじゃなかった。\nサナエちゃんを見つけた。でも、あれはもうサナエちゃんじゃない。\n顔が裂けて、おそろしい歯をむき出しにして包丁を持って追いかけてくる。\n壁の角をうまく使って隠れるしかない。\nもう限界だ。上の階に逃げるしかない。助けて、◯◯……。`,
+            3: `【栄小学校5-1 ゆうせいの手帳：3階（最後）】\n\nからだが青くなっていく。3階に追い詰められた。\nサナエちゃんが下から上がってくる。\nこの壁のせいで、僕はサナエちゃんから逃げられない。\nこの壁のせいで、大好きな5年1組に帰れない。\n\n◯◯、今どこにいるの？\n僕はもう、壁なんて気にしないで、君のところにまっすぐ歩いていけるよ。\nほら、うしろをふり向いて――`
+        };
+
+        let currentFloor = 1;
+        const CELL_SIZE = 4;
+        let maze, MAP_SIZE, HALF_MAP;
+
+        function gridTo3D(row, col) {
+            return { x: (col * CELL_SIZE) - HALF_MAP + CELL_SIZE / 2, z: (row * CELL_SIZE) - HALF_MAP + CELL_SIZE / 2 };
+        }
+
+        // --- Three.js 初期設定 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x010203); 
+
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+        let cameraRotationY = 0;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.05)); 
+        const flashlight = new THREE.PointLight(0xffffff, 25, 16); 
+        camera.add(flashlight);
+        scene.add(camera);
+
+        const wallGroup = new THREE.Group();
+        scene.add(wallGroup);
+
+        let floorMesh = null, ceilingMesh = null;
+
+        const startLight = new THREE.PointLight(0xff0000, 30, 6);
+        scene.add(startLight);
+
+        const itemMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.4), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+        scene.add(itemMesh);
+        const itemLight = new THREE.PointLight(0xffff00, 15, 4);
+        scene.add(itemLight);
+
+        // --- 音響システム ---
+        let audioCtx = null;
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            setInterval(() => {
+                if (gameState !== 'playing') return;
+                playTone(45, 0.2, 0.5, 'sine');
+                setTimeout(() => { if (gameState === 'playing') playTone(40, 0.15, 0.5, 'sine'); }, 300);
+            }, 1400);
+        }
+
+        function playTone(freq, duration, volume, type='sine') {
+            if (!audioCtx) return;
+            try {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+                osc.start(); osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function playItemGetSound() {
+            playTone(293, 0.1, 0.3, 'triangle');
+            setTimeout(() => playTone(440, 0.15, 0.3, 'triangle'), 90);
+        }
+
+        function playJumpscareSound() {
+            if (!audioCtx) return;
+            for(let i=0; i<8; i++) {
+                playTone(50 + Math.random()*300, 2.5, 0.6, 'sawtooth');
+                playTone(80 + Math.random()*500, 2.0, 0.5, 'triangle');
+            }
+        }
+
+        // --- 普通の灰色の壁テクスチャ生成 ---
+        function generateGrayWallTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            const baseGray = 55 + Math.floor(Math.random() * 20); 
+            ctx.fillStyle = `rgb(${baseGray}, ${baseGray}, ${baseGray})`;
+            ctx.fillRect(0, 0, 256, 256);
+
+            for(let i=0; i<150; i++) {
+                const n = Math.random() > 0.5 ? 4 : -4;
+                ctx.fillStyle = `rgb(${baseGray+n}, ${baseGray+n}, ${baseGray+n})`;
+                ctx.fillRect(Math.random()*256, Math.random()*256, 2, 2);
+            }
+
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, 256, 256);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function generateFloorTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#1c1c1c';
+            ctx.fillRect(0,0,256,256);
+            ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 4;
+            ctx.strokeRect(0,0,256,256);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // --- 最恐版サナエちゃん＆ゆうせいくんのグラフィック生成 ---
+        function createInsaneHorrorFace(type) {
+            const canvas = document.createElement('canvas'); 
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d'); 
+            ctx.clearRect(0, 0, 512, 512);
+
+            if(type === 'sanae') {
+                ctx.fillStyle = '#cfd3d4'; 
+                ctx.beginPath(); ctx.ellipse(256, 260, 160, 200, 0, 0, Math.PI * 2); ctx.fill();
+
+                ctx.strokeStyle = '#050505'; ctx.lineWidth = 5;
+                for (let i = 0; i < 300; i++) {
+                    ctx.beginPath(); let startX = 60 + Math.random() * 392; ctx.moveTo(startX, 30);
+                    ctx.bezierCurveTo(startX + (Math.random() - 0.5) * 40, 150, startX + (Math.random() - 0.5) * 60, 250, startX + (Math.random() - 0.5) * 80, 220 + Math.random() * 180); ctx.stroke();
+                }
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath(); ctx.arc(170, 210, 45, 0, Math.PI*2); ctx.arc(342, 210, 45, 0, Math.PI*2); ctx.fill();
+                
+                ctx.strokeStyle = '#990000'; ctx.lineWidth = 2;
+                for(let i=0; i<16; i++) {
+                    ctx.beginPath(); ctx.moveTo(170, 210); ctx.lineTo(170+(Math.random()-0.5)*80, 210+(Math.random()-0.5)*80); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(342, 210); ctx.lineTo(342+(Math.random()-0.5)*80, 210+(Math.random()-0.5)*80); ctx.stroke();
+                }
+
+                ctx.fillStyle = '#000000';
+                ctx.beginPath(); ctx.arc(170, 210, 12, 0, Math.PI*2); ctx.arc(342, 210, 12, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.beginPath(); ctx.arc(170, 210, 52, 0, Math.PI*2); ctx.arc(342, 210, 52, 0, Math.PI*2); ctx.fill();
+
+                // 裂けた大きな口と、びっしり生えた「鋭い尖った無限の歯」
+                ctx.fillStyle = '#3a0000'; 
+                ctx.beginPath();
+                ctx.moveTo(100, 340);
+                ctx.quadraticCurveTo(256, 460, 412, 340);
+                ctx.quadraticCurveTo(256, 310, 100, 340);
+                ctx.fill();
+
+                ctx.fillStyle = '#f5f5f5';
+                for (let x = 115; x < 400; x += 14) {
+                    ctx.beginPath(); ctx.moveTo(x, 332); ctx.lineTo(x + 7, 360 + (Math.random() * 8)); ctx.lineTo(x + 14, 332); ctx.fill();
+                }
+                for (let x = 115; x < 400; x += 14) {
+                    ctx.beginPath(); ctx.moveTo(x, 395); ctx.lineTo(x + 7, 365 - (Math.random() * 8)); ctx.lineTo(x + 14, 395); ctx.fill();
+                }
+
+                ctx.fillStyle = '#800000';
+                ctx.fillRect(165, 240, 8, 50); ctx.fillRect(337, 240, 8, 50);
+                ctx.fillRect(200, 380, 12, 60); ctx.fillRect(300, 380, 10, 45);
+
+            } else {
+                ctx.fillStyle = '#4a5d63'; 
+                ctx.beginPath(); ctx.ellipse(256, 260, 150, 190, 0, 0, Math.PI * 2); ctx.fill();
+
+                ctx.fillStyle = '#000000';
+                ctx.beginPath(); ctx.arc(160, 200, 35, 0, Math.PI*2); ctx.arc(352, 200, 35, 0, Math.PI*2); ctx.fill();
+                
+                ctx.fillStyle = '#110000';
+                ctx.beginPath(); ctx.ellipse(256, 360, 90, 60, 0, 0, Math.PI*2); ctx.fill();
+                
+                ctx.fillStyle = '#d1c7a5'; 
+                for(let i=0; i<12; i++) {
+                    let tx = 180 + i*14;
+                    ctx.beginPath(); ctx.moveTo(tx, 340); ctx.lineTo(tx+6, 365); ctx.lineTo(tx+12, 340); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(tx, 380); ctx.lineTo(tx+6, 355); ctx.lineTo(tx+12, 380); ctx.fill();
+                }
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const charGeo = new THREE.PlaneGeometry(2.5, 2.5);
+        const sanaeMat = new THREE.MeshBasicMaterial({ map: createInsaneHorrorFace('sanae'), transparent: true, side: THREE.DoubleSide });
+        const sanae = new THREE.Mesh(charGeo, sanaeMat);
+        const yuseiMat = new THREE.MeshBasicMaterial({ map: createInsaneHorrorFace('yusei'), transparent: true, side: THREE.DoubleSide });
+        const yusei = new THREE.Mesh(charGeo, yuseiMat);
+
+        // --- 衝突判定システム ---
+        function isWallColliding(x, z, r = 0.55) {
+            const points = [{x:x-r, z:z-r}, {x:x+r, z:z-r}, {x:x-r, z:z+r}, {x:x+r, z:z+r}];
+            for (let p of points) {
+                const col = Math.floor((p.x + HALF_MAP) / CELL_SIZE);
+                const row = Math.floor((p.z + HALF_MAP) / CELL_SIZE);
+                if (row < 0 || row >= MAP_SIZE || col < 0 || col >= MAP_SIZE || maze[row][col] === 1) return true;
+            }
+            return false;
+        }
+
+        // --- フロア・ビジュアル構築 ---
+        function setupFloor(floorNum) {
+            currentFloor = floorNum;
+            maze = mazes[currentFloor];
+            MAP_SIZE = maze.length;
+            HALF_MAP = (MAP_SIZE * CELL_SIZE) / 2;
+            hasItem = false; 
+
+            while(wallGroup.children.length > 0) { wallGroup.remove(wallGroup.children[0]); }
+            if (floorMesh) scene.remove(floorMesh);
+            if (ceilingMesh) scene.remove(ceilingMesh);
+
+            const wallGeo = new THREE.BoxGeometry(CELL_SIZE, 5, CELL_SIZE);
+
+            for(let r=0; r<MAP_SIZE; r++) {
+                for(let c=0; c<MAP_SIZE; c++) {
+                    if(maze[r][c] === 1) {
+                        const pos = gridTo3D(r, c);
+                        const mat = new THREE.MeshLambertMaterial({ map: generateGrayWallTexture() });
+                        const wallMesh = new THREE.Mesh(wallGeo, mat);
+                        wallMesh.position.set(pos.x, 2.5, pos.z);
+                        wallGroup.add(wallMesh);
+                    }
+                }
+            }
+
+            const totalRoomSize = MAP_SIZE * CELL_SIZE;
+            const floorGeo = new THREE.PlaneGeometry(totalRoomSize, totalRoomSize);
+            const floorTex = generateFloorTexture();
+            floorMesh = new THREE.Mesh(floorGeo, new THREE.MeshLambertMaterial({ map: floorTex }));
+            floorMesh.rotation.x = -Math.PI / 2;
+            scene.add(floorMesh);
+
+            ceilingMesh = new THREE.Mesh(floorGeo, new THREE.MeshLambertMaterial({ color: 0x1a1a1a }));
+            ceilingMesh.rotation.x = Math.PI / 2;
+            ceilingMesh.position.set(0, 5, 0);
+            scene.add(ceilingMesh);
+
+            const sPos = gridTo3D(MAP_SIZE - 2, 1);
+            camera.position.set(sPos.x, 1.6, sPos.z);
+            cameraRotationY = 0; 
+
+            const iPos = gridTo3D(1, MAP_SIZE - 2);
+            itemMesh.position.set(iPos.x, 0.5, iPos.z);
+            itemLight.position.set(iPos.x, 0.6, iPos.z);
+            
+            scene.remove(sanae); scene.remove(yusei);
+
+            if (currentFloor === 1 || currentFloor === 2) {
+                scene.add(sanae);
+                startLight.color.setHex(0xff0000); scene.add(startLight);
+                startLight.position.set(sPos.x, 0.5, sPos.z);
+                sanae.position.set(gridTo3D(1, 1).x, 1.2, gridTo3D(1, 1).z);
+            }
+            if (currentFloor === 3) {
+                scene.add(sanae); scene.add(yusei);
+                startLight.color.setHex(0xaa0000); scene.add(startLight);
+                startLight.position.set(sPos.x, 0.5, sPos.z);
+                sanae.position.set(gridTo3D(1, 1).x, 1.2, gridTo3D(1, 1).z);
+                const yuseiStart = gridTo3D(Math.floor(MAP_SIZE/2), Math.floor(MAP_SIZE/2));
+                yusei.position.set(yuseiStart.x, 1.2, yuseiStart.z);
+            }
+            scene.add(itemMesh); scene.add(itemLight);
+
+            document.getElementById('floor-display').innerText = `【現在位置: 廃病院 ${currentFloor}階】`;
+        }
+
+        // --- 操作入力管理（WASDカニ歩き対応 & マウスポインターロック対応） ---
+        const keys = { w:false, s:false, a:false, d:false };
+        let gameState = 'title'; 
+
+        window.addEventListener('keydown', (e) => { 
+            if (e.code==='KeyW'||e.key==='ArrowUp') keys.w=true; 
+            if (e.code==='KeyS'||e.key==='ArrowDown') keys.s=true; 
+            if (e.code==='KeyA'||e.key==='ArrowLeft') keys.a=true; 
+            if (e.code==='KeyD'||e.key==='ArrowRight') keys.d=true; 
+        });
+        window.addEventListener('keyup', (e) => { 
+            if (e.code==='KeyW'||e.key==='ArrowUp') keys.w=false; 
+            if (e.code==='KeyS'||e.key==='ArrowDown') keys.s=false; 
+            if (e.code==='KeyA'||e.key==='ArrowLeft') keys.a=false; 
+            if (e.code==='KeyD'||e.key==='ArrowRight') keys.d=false; 
+        });
+
+        // ポインターロックの有効化（クリックでマウスを固定して視点操作へ）
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.addEventListener('click', () => {
+            if (gameState === 'playing') {
+                canvasContainer.requestPointerLock();
+            }
+        });
+
+        // 【大修正】勝手に回る自動回転を完全に削除し、純粋なマウスの動きに同期
+        window.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === canvasContainer && gameState === 'playing') {
+                // マウスの横移動量(movementX)に感度を掛け合わせてカメラ角度に加算（勝手には回らない）
+                const sensitivity = 0.0025;
+                cameraRotationY -= e.movementX * sensitivity;
+            }
+        });
+
+        // --- ミニマップ描画 ---
+        const minimapCanvas = document.getElementById('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        minimapCanvas.width = 150; minimapCanvas.height = 150;
+
+        function drawMinimap() {
+            minimapCtx.clearRect(0, 0, 150, 150);
+            const cellPixels = 150 / MAP_SIZE;
+            minimapCtx.fillStyle = '#222222';
+            for(let r=0; r<MAP_SIZE; r++) {
+                for(let c=0; c<MAP_SIZE; c++) {
+                    if(maze[r][c] === 1) { minimapCtx.fillRect(c * cellPixels, r * cellPixels, cellPixels, cellPixels); }
+                }
+            }
+            function posToMinimap(pos) { return { x: ((pos.x + HALF_MAP) / CELL_SIZE) * cellPixels, y: ((pos.z + HALF_MAP) / CELL_SIZE) * cellPixels }; }
+            const pPos = posToMinimap(camera.position);
+            minimapCtx.fillStyle = '#00ff00';
+            minimapCtx.beginPath(); minimapCtx.arc(pPos.x, pPos.y, 4, 0, Math.PI*2); minimapCtx.fill();
+
+            if (currentFloor === 1 || currentFloor === 2 || currentFloor === 3) {
+                const sPos = posToMinimap(sanae.position);
+                minimapCtx.fillStyle = '#ff0000';
+                minimapCtx.beginPath(); minimapCtx.arc(sPos.x, sPos.y, 4, 0, Math.PI*2); minimapCtx.fill();
+            }
+        }
+
+        // --- メインループ & AI ---
+        let hasItem = false;
+        let killerEntity = null;   
+        let jumpscareTimer = 0;
+
+        function updateSanaeAI(speed, ghost) {
+            const dir = new THREE.Vector3().subVectors(camera.position, sanae.position);
+            dir.y = 0; dir.normalize();
+            if (ghost) {
+                sanae.position.x += dir.x * speed;
+                sanae.position.z += dir.z * speed;
+            } else {
+                const sanaeRadius = 1.1; 
+                const nextX = sanae.position.x + dir.x * speed;
+                if (!isWallColliding(nextX, sanae.position.z, sanaeRadius)) sanae.position.x = nextX;
+                const nextZ = sanae.position.z + dir.z * speed;
+                if (!isWallColliding(sanae.position.x, nextZ, sanaeRadius)) sanae.position.z = nextZ;
+            }
+            sanae.lookAt(camera.position);
+            sanae.position.y = 1.2; 
+        }
+
+        function updateYuseiAI(speed) {
+            const dir = new THREE.Vector3().subVectors(camera.position, yusei.position);
+            dir.y = 0; dir.normalize();
+            yusei.position.x += dir.x * speed; 
+            yusei.position.z += dir.z * speed;
+            yusei.lookAt(camera.position);
+            yusei.position.y = 1.2;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (gameState === 'title' || gameState === 'reading' || gameState === 'intermission' || gameState === 'gameover' || gameState === 'clear') { 
+                renderer.render(scene, camera); 
+                return; 
+            }
+
+            if (gameState === 'jumpscare') {
+                document.exitPointerLock(); // 捕まったらロック解除
+                jumpscareTimer++;
+                const dirToPlayer = new THREE.Vector3().subVectors(camera.position, killerEntity.position).normalize();
+                camera.position.copy(killerEntity.position).add(dirToPlayer.multiplyScalar(0.55)); 
+                camera.lookAt(killerEntity.position);
+                camera.position.x += (Math.random() - 0.5) * 0.6;
+                camera.position.y += (Math.random() - 0.5) * 0.6;
+                if (jumpscareTimer % 2 === 0) { renderer.setClearColor(0x440000); } else { renderer.setClearColor(0x000000); }
+                if (jumpscareTimer > 80) {
+                    gameState = 'gameover'; 
+                    renderer.setClearColor(0x010203);
+                    showEndScreen(`${killerEntity === sanae ? 'サナエ' : 'ゆうせい'}の鋭い歯が襲いかかる……。`, '#1a0000', false);
+                }
+                renderer.render(scene, camera);
+                return;
+            }
+
+            drawMinimap();
+            
+            // カメラの現在の向き（Y軸回転）を適用
+            camera.rotation.set(0, cameraRotationY, 0);
+
+            // 【大修正】WASDキーによる完全な前後・左右平行カニ歩き移動
+            let moveX = 0; let moveZ = 0; const pSpeed = 0.085;
+            
+            // 前後移動ベクトル
+            if (keys.w) { moveX -= Math.sin(cameraRotationY) * pSpeed; moveZ -= Math.cos(cameraRotationY) * pSpeed; }
+            if (keys.s) { moveX += Math.sin(cameraRotationY) * pSpeed; moveZ += Math.cos(cameraRotationY) * pSpeed; }
+            // 左右カニ歩きベクトル（進行方向から90度ズラしてスライド移動）
+            if (keys.a) { moveX -= Math.cos(cameraRotationY) * pSpeed; moveZ += Math.sin(cameraRotationY) * pSpeed; }
+            if (keys.d) { moveX += Math.cos(cameraRotationY) * pSpeed; moveZ -= Math.sin(cameraRotationY) * pSpeed; }
+
+            const nextX = camera.position.x + moveX;
+            if (!isWallColliding(nextX, camera.position.z, 0.55)) camera.position.x = nextX;
+            const nextZ = camera.position.z + moveZ;
+            if (!isWallColliding(camera.position.x, nextZ, 0.55)) camera.position.z = nextZ;
+
+            camera.position.y = 1.6;
+            itemMesh.rotation.y += 0.02;
+
+            if (!hasItem && camera.position.distanceTo(itemMesh.position) < 1.4) {
+                hasItem = true; scene.remove(itemMesh); scene.remove(itemLight);
+                playItemGetSound(); 
+                gameState = 'reading';
+                document.exitPointerLock(); // 日記を読む時はロック解除
+                document.getElementById('diary-content').innerText = diaryTexts[currentFloor];
+                document.getElementById('diary-overlay').style.display = 'flex';
+            }
+
+            const currentStartPos = gridTo3D(MAP_SIZE - 2, 1);
+            if (hasItem && camera.position.distanceTo(new THREE.Vector3(currentStartPos.x, 1.6, currentStartPos.z)) < 1.4) {
+                document.exitPointerLock();
+                if (currentFloor === 1) {
+                    gameState = 'intermission'; showEndScreen('1階脱出。さらに深く、暗い2階へ……。', '#111111', true);
+                } else if (currentFloor === 2) {
+                    gameState = 'intermission'; showEndScreen('2階脱出。最上階3階から二つの気配が迫る。', '#0a0a0a', true);
+                } else {
+                    gameState = 'clear'; showEndScreen('完全生還！すべての怪異を振り切った！', '#001100', false);
+                }
+            }
+
+            if (currentFloor === 1 || currentFloor === 2 || currentFloor === 3) {
+                let sSpeed = (currentFloor === 1) ? 0.022 : (currentFloor === 2) ? 0.045 : 0.032; 
+                if (hasItem) sSpeed += 0.012; 
+                updateSanaeAI(sSpeed, currentFloor === 1);
+                if (camera.position.distanceTo(sanae.position) < 1.2) { gameState = 'jumpscare'; killerEntity = sanae; jumpscareTimer = 0; playJumpscareSound(); }
+            }
+
+            if (currentFloor === 3) {
+                let ySpeed = 0.028; if (hasItem) ySpeed += 0.012;
+                updateYuseiAI(ySpeed);
+                if (camera.position.distanceTo(yusei.position) < 1.2) { gameState = 'jumpscare'; killerEntity = yusei; jumpscareTimer = 0; playJumpscareSound(); }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        document.getElementById('diary-close-btn').onclick = () => {
+            document.getElementById('diary-overlay').style.display = 'none';
+            gameState = 'playing';
+            canvasContainer.requestPointerLock(); // 戻ったらまたロック
+        };
+
+        function showEndScreen(text, bgColor, isNextFloor) {
+            const overlay = document.getElementById('screen-overlay');
+            const btn = document.getElementById('action-btn');
+            document.getElementById('msg').innerText = text;
+            overlay.style.backgroundColor = bgColor; overlay.style.display = 'flex';
+            
+            if (isNextFloor) {
+                const nextFloorTarget = currentFloor + 1;
+                btn.innerText = `${nextFloorTarget}階へ`;
+                btn.onclick = () => {
+                    overlay.style.display = 'none';
+                    setupFloor(nextFloorTarget); 
+                    gameState = 'playing';
+                    canvasContainer.requestPointerLock();
+                };
+            } else {
+                btn.innerText = "もう一度挑戦する";
+                btn.onclick = () => { location.reload(); };
+            }
+        }
+
+        document.getElementById('start-btn').onclick = () => {
+            document.getElementById('start-screen').style.display = 'none';
+            initAudio(); gameState = 'playing';
+            canvasContainer.requestPointerLock(); // 開始と同時にポインターロック
+        };
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        setupFloor(1);
+        animate();
+    </script>
+</body>
+</html>
