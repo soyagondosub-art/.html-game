@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>HOSPITAL LABYRINTH: TRUE BLACKOUT HORROR</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        
+        .glitch-active { animation: shake 0.1s infinite alternate; }
+        @keyframes shake {
+            0% { transform: translate(3px, 2px) rotate(0deg); filter: contrast(1.5) brightness(1.2); }
+            100% { transform: translate(-3px, -2px) rotate(0.5deg); filter: contrast(1.0) brightness(0.7); }
+        }
+
+        .blackout-glitch { animation: blackout-spark 0.08s infinite alternate; }
+        @keyframes blackout-spark {
+            0% { opacity: 0.1; filter: invert(0); }
+            100% { opacity: 0.9; filter: invert(0.05) brightness(0.3); }
+        }
+
+        #ui-layer {
+            position: absolute; top: 20px; left: 20px; 
+            color: #fff; background: rgba(10, 15, 12, 0.95); 
+            padding: 20px; border-radius: 5px; border: 2px solid #ff3333;
+            font-size: 14px; line-height: 1.8; z-index: 100;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.4);
+            pointer-events: none;
+        }
+        #floor-display { font-size: 18px; font-weight: bold; color: #ff3333; text-shadow: 0 0 5px #ff0000; }
+        
+        #stamina-container {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 300px; height: 10px; background: rgba(34, 34, 34, 0.7); 
+            border: 2px solid #555; border-radius: 5px; overflow: hidden; z-index: 180;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5); pointer-events: none;
+        }
+        #stamina-bar { width: 100%; height: 100%; background: #00ffaa; transition: width 0.05s linear; }
+
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #030303; display: flex; justify-content: center; align-items: center;
+            flex-direction: column; z-index: 300; color: white; text-align: center;
+        }
+        #screen-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            z-index: 200; display: none; text-shadow: 0 0 10px #000; color: white; background: rgba(0,0,0,0.85);
+        }
+        .btn { margin-top:20px; padding:12px 30px; font-size:18px; cursor:pointer; background:#111; color:#ff3333; border:2px solid #ff3333; border-radius:4px; font-weight:bold; letter-spacing: 2px; }
+        .btn:hover { background:#ff3333; color:#000; box-shadow: 0 0 15px #ff3333; }
+        
+        #minimap-container {
+            position: absolute; top: 20px; right: 20px;
+            width: 170px; height: 170px; 
+            background: rgba(5, 5, 5, 0.98);
+            border: 2px solid #ff3333;
+            border-radius: 6px;
+            overflow: hidden;
+            z-index: 150;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.6), inset 0 0 10px rgba(0,0,0,0.8);
+        }
+        #minimap { width: 100%; height: 100%; }
+
+        #diary-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.97); display: none; justify-content: center;
+            align-items: center; flex-direction: column; z-index: 250;
+        }
+        #diary-box {
+            background: #070707; border: 2px solid #ffaa00; padding: 35px;
+            max-width: 550px; width: 80%; border-radius: 6px;
+            box-shadow: 0 0 30px rgba(255, 170, 0, 0.3); line-height: 2.0;
+            font-family: 'Hiragino Mincho ProN', 'MS Mincho', serif;
+        }
+        #diary-content { white-space: pre-wrap; font-size: 16px; color: #eddcc4; letter-spacing: 1.5px; }
+        
+        #guide-notice {
+            position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+            color: #ffaa44; font-size: 13px; font-weight: bold; z-index: 100; text-align: center; 
+            background: rgba(0,0,0,0.9); padding: 8px 20px; border-radius: 4px; border: 1px solid #ffaa44;
+            letter-spacing: 1px; pointer-events: none;
+        }
+
+        #yusei-alert {
+            position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
+            color: #ff2200; font-size: 16px; font-weight: bold; z-index: 110; text-align: center;
+            background: rgba(10, 0, 0, 0.95); padding: 12px 30px; border-radius: 4px; border: 2px solid #ff2200;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.7); display: none;
+            animation: pulse 0.6s infinite alternate; pointer-events: none;
+        }
+        @keyframes pulse { from { opacity: 0.4; transform: translateX(-50%) scale(0.96); } to { opacity: 1.0; transform: translateX(-50%) scale(1.04); } }
+
+        #curse-overlay {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            pointer-events: none; z-index: 280; display: none;
+            justify-content: center; align-items: center;
+            background: transparent;
+        }
+        #curse-ghost { width: 75vh; height: 75vh; opacity: 0; transition: opacity 0.1s linear; }
+
+        #chaser-speech-overlay {
+            position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%);
+            color: #ff0011; font-family: 'Hiragino Mincho ProN', 'MS Mincho', serif;
+            font-size: 52px; font-weight: bold; letter-spacing: 10px; z-index: 220;
+            pointer-events: none; display: none; text-align: center;
+            text-shadow: 0 0 4px #000, 0 0 15px #ff0000, 0 0 35px #550000;
+            animation: horrorPulse 0.38s infinite alternate;
+            white-space: nowrap;
+        }
+        @keyframes horrorPulse {
+            0% { transform: translate(-50%, -50%) scale(0.95) skewX(-3deg); opacity: 0.8; }
+            100% { transform: translate(-50%, -50%) scale(1.05) skewX(3deg); opacity: 1.0; }
+        }
+
+        #jumpscare-overlay {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #000; z-index: 500; display: none;
+            justify-content: center; align-items: center; overflow: hidden;
+        }
+        #jumpscare-canvas {
+            width: 100vh; height: 100vh;
+            animation: jumpscare-glitch 0.04s infinite alternate;
+        }
+        @keyframes jumpscare-glitch {
+            0% { transform: scale(1.1) translate(10px, -10px) rotate(1.5deg); filter: contrast(3.0) brightness(1.8); }
+            100% { transform: scale(1.35) translate(-10px, 10px) rotate(-1.5deg); filter: invert(0.05) contrast(4.0) brightness(2.2); }
+        }
+
+        #hiding-prompt {
+            position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%);
+            color: #ffffff; font-size: 20px; font-weight: bold; z-index: 190; text-align: center;
+            background: rgba(0,0,0,0.8); padding: 10px 25px; border-radius: 5px; border: 2px solid #00ffaa;
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.5); display: none; pointer-events: none;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body id="game-body">
+
+    <div id="start-screen">
+        <h1 style="color: #ff0000; font-size: 42px; letter-spacing: 10px; margin-bottom: 5px; text-shadow: 0 0 25px #ff0000;">廃病院の怪異：漆黒 完全版</h1>
+        <p style="color: #8a948f; font-size: 15px; margin-bottom: 25px; letter-spacing: 1px;">恐怖深化版 (バグ＆AI調整版)</p>
+        <p style="color: #ccc; font-size: 14px; max-width: 650px; line-height: 1.8; margin-bottom: 20px;">
+            【修正完了通知】<br>
+            🗺️ ミニマップ同期修正: マップの左右反転を直し、向いている方角と白線を完全に一致させました。<br>
+            👹 くろせのAI刷新: 日記への居座りを廃止！病内を徘徊し、プレイヤーを発見・足音を感知すると襲ってきます。<br>
+            📦 隠れ場所の強化: 棚やクローゼット、ベッドの下に隠れることで「くろせ」をやり過ごせます。
+        </p>
+        <button id="start-btn" class="btn">精神を刻み、潜入する</button>
+    </div>
+
+    <div id="ui-layer">
+        <span id="floor-display">【現在位置: 廃病院 1階】</span><br>
+        迷路の奥にある<span style="color:#ffff00;font-weight:bold;">「田中チー牛１１歳の日記（🟨）」</span>を回収し、<br>
+        スタート地点（緑枠）まで生きて帰還せよ。<br><br>
+        移動: <span style="color:#00ff00;font-weight:bold;">W, A, S, D</span> / 視点: <span style="color:#00ffff;font-weight:bold;">マウス</span><br>
+        全力疾走: <span style="color:#ff3366;font-weight:bold;">Shiftキー長押し</span> / ジャンプ: <span style="color:#ffff00;font-weight:bold;">Spaceキー</span><br>
+        懐中電灯ON/OFF: <span style="color:#ffcc00;font-weight:bold;">Qキー</span><br>
+        隠れる / 出る: <span style="color:#00ffaa;font-weight:bold;">Eキー (棚、クローゼット、ベッドの下)</span><br>
+        <span style="color:#ff3333;font-weight:bold;">⚠️隠れる時は、くろせにガッツリ見られていない状態で入る必要があります。</span>
+    </div>
+
+    <div id="stamina-container"><div id="stamina-bar"></div></div>
+
+    <div id="guide-notice">【警告】定期的にライトも非常灯も消える完全停電が発生する…！</div>
+    
+    <div id="yusei-alert">⚠️ クロセが接近中！近くの隠れ場所に逃げ込め！</div>
+
+    <div id="chaser-speech-overlay"></div>
+
+    <div id="curse-overlay"><canvas id="curse-ghost"></canvas></div>
+    
+    <div id="jumpscare-overlay"><canvas id="jumpscare-canvas"></canvas></div>
+
+    <div id="minimap-container"><canvas id="minimap"></canvas></div>
+
+    <div id="hiding-prompt"></div>
+
+    <div id="diary-overlay">
+        <div id="diary-box"><div id="diary-content"></div></div>
+        <button id="diary-close-btn" class="btn" style="color:#00ff00; border-color:#00ff00;">日記を伏せて立ち上がる</button>
+    </div>
+
+    <div id="screen-overlay">
+        <div id="msg" style="font-size: 26px; font-weight: bold; text-align: center; padding: 0 20px; line-height: 1.8;"></div>
+        <button id="action-btn" class="btn" style="color:#fff; border-color:#fff;">深淵へ進む</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three';
+
+        const SCALE = 2.5;
+
+        const mazes = {
+            1: [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+                [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
+                [1,0,1,0,0,0,1,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,0,1,0,1,0,1,1,1,0,1], 
+                [1,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,1,1,0,1,1,1,0,1,1,1,0,1,0,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+                [1,0,1,1,1,0,1,1,1,0,1,1,1,0,1], 
+                [1,0,1,0,0,0,1,0,1,0,0,0,0,0,1],
+                [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1],
+                [1,0,1,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            2: [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1], 
+                [1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1],
+                [1,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,0,1,0,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+                [1,1,1,2,1,1,1,0,1,0,1,1,1,3,1,1,1], 
+                [1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
+                [1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1],
+                [1,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],
+                [1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1],
+                [1,0,1,0,1,0,0,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
+                [1,1,1,1,1,0,1,0,1,0,1,0,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            3: [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+                [1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],
+                [1,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1],
+                [1,1,1,0,1,1,1,0,1,0,1,0,1,0,1,1,1,0,1,1,1],
+                [1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1],
+                [1,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
+                [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],
+                [1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,1,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+                [1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,0,1],
+                [1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,1,0,1],
+                [1,0,1,0,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ]
+        };
+
+        const floorConfigs = {
+            1: { startGrid: {x: 1, z: 13}, diaryGrid: {x: 12, z: 1} },
+            2: { startGrid: {x: 1, z: 15}, diaryGrid: {x: 15, z: 1} },
+            3: { startGrid: {x: 1, z: 19}, diaryGrid: {x: 19, z: 1} }
+        };
+
+        const diaryTexts = {
+            1: "【田中チー牛１１歳のノート 1ページ目】\n\nみんなには秘密でここに来た。\nでも、この廃病院は何かがおかしい。入った瞬間に扉が閉まったんだ。\n広い灰色の通路の奥から、誰かの不気味な足音が聞こえる。\n怖い、誰か助けて、僕を見つけてくれ……。",
+            2: "【田中チー牛１１歳のノート 2ページ目】\n\n上の階に逃げてきた。位置は常に気配でわかるはずだ。\nここには恐ろしい段差がある。飛び降りたらアイツからは逃げられるけど、もう上には戻れない。\n壁の落書きを見つけた。「くろせ」って書いてある。\nくろせって誰だ？あいつが僕を追いかけてくる化物なのか……？",
+            3: "【ボロボロの引き裂かれた日記】\n\nついに最上階まで来てしまった。もう逃げ場はない。\nわかった、すべてわかったぞ。くろせの正体は……。\n日記を拾った瞬間、後ろに気配がした。大きな影が僕を――。\n（血の跡でこれ以上は読めない。早く1階のスタート地点へ戻らなければ！）"
+        };
+
+        const horrorVoices = [
+            "見 つ け た よ",
+            "そ こ に い た ん だ ね",
+            "ど こ へ 逃 ゲ る の ？",
+            "ね ぇ 、 後 ろ 見 て ？"
+        ];
+        let isChaserLookingAtPlayer = false; 
+
+        let currentFloor = 1;
+        let mapData = mazes[currentFloor];
+        let config = floorConfigs[currentFloor];
+
+        let gameActive = false;
+        let hasDiary = false;
+        let isDead = false;
+
+        let stamina = 100;
+        let isSprinting = false;
+        let staminaExhausted = false;
+
+        let isJumping = false;
+        let velocityY = 0;
+        const GRAVITY = -0.012; 
+        const JUMP_FORCE = 0.2;
+        const PLAYER_HEIGHT = 1.5;
+
+        let isFlashlightOn = true;
+
+        let blackoutCycleTimer = 0; 
+        let isBlackout = false;
+        let hasPlayedWarningSound = false;
+
+        let minimapGlobalTimer = 0;
+
+        let isHiding = false;
+        let activeHidingPlace = null;
+        let hidingSpotted = false; 
+        let hidingPlacesInScene = [];
+
+        // --- クロセ（AI改良用変数） ---
+        let chaserTargetNode = { x: 0, z: 0 }; 
+        let isChaserChasing = false;          
+
+        const BASE_PLAYER_SPEED = 0.055; 
+        const SPRINT_PLAYER_SPEED = 0.11; 
+        let chaserSpeed = 0.026;         
+
+        let audioCtx = null;
+        let masterGain = null;
+        let nextHeartbeatTime = 0;
+        let nextChaserFootTime = 0;
+        let nextPlayerFootTime = 0; 
+        let nextBgmStepTime = 0; 
+
+        let chaserPos = { x: 0, z: 0 };
+        let playerPos = { x: 0, z: 0, y: PLAYER_HEIGHT };
+        const keys = {};
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioCtx.createGain();
+                masterGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+                masterGain.connect(audioCtx.destination);
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playDynamicBgmStep(dist, isSighted) {
+            if (!audioCtx || !gameActive || isDead || !masterGain) return;
+
+            let severity = Math.max(0, Math.min(1.0, 1.0 - (dist / (SCALE * 6.5))));
+            
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(masterGain);
+            
+            osc.type = 'triangle';
+            let baseFreq = 48 + (severity * 28);
+            if (severity > 0.5) baseFreq += (Math.random() > 0.5 ? 3.0 : -3.0); 
+
+            osc.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(32, audioCtx.currentTime + 0.3);
+            
+            let vol = 0.2 + (severity * 0.55);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.32);
+            
+            osc.start(); osc.stop(audioCtx.currentTime + 0.35);
+
+            if (isSighted && !isBlackout && severity > 0.1) {
+                let highOsc = audioCtx.createOscillator();
+                let highGain = audioCtx.createGain();
+                highOsc.connect(highGain); highGain.connect(masterGain);
+                highOsc.type = 'sine';
+                highOsc.frequency.setValueAtTime(2300 + Math.sin(audioCtx.currentTime * 60) * 120, audioCtx.currentTime);
+                highGain.gain.setValueAtTime(0.05 * severity, audioCtx.currentTime);
+                highGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
+                highOsc.start(); highOsc.stop(audioCtx.currentTime + 0.25);
+            }
+        }
+
+        function playPlayerFootstep(isRunning, volumeFactor = 1.0) {
+            if (!audioCtx || isBlackout || !masterGain) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(masterGain);
+            osc.frequency.setValueAtTime(isRunning ? 115 : 90, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 0.09);
+            gain.gain.setValueAtTime((isRunning ? 0.16 : 0.09) * volumeFactor, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.09);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playSwitchSound() {
+            if (!audioCtx || !masterGain) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(masterGain);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.03);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function playHeartbeat(vol) {
+            if (!audioCtx || !masterGain) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(masterGain);
+            osc.frequency.setValueAtTime(55, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.12);
+            gain.gain.setValueAtTime(vol * 0.8, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+            setTimeout(() => {
+                if (isDead || !masterGain) return;
+                let osc2 = audioCtx.createOscillator(); let gain2 = audioCtx.createGain();
+                osc2.connect(gain2); gain2.connect(masterGain);
+                osc2.frequency.setValueAtTime(50, audioCtx.currentTime);
+                osc2.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.15);
+                gain2.gain.setValueAtTime(vol * 0.5, audioCtx.currentTime);
+                gain2.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.18);
+                osc2.start(); osc2.stop(audioCtx.currentTime + 0.18);
+            }, 160);
+        }
+
+        function playChaserFootstep(vol) {
+            if (!audioCtx || !masterGain) return;
+            let bufferSize = audioCtx.sampleRate * 0.1;
+            let buffer = bufferSize ? audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate) : null;
+            if(!buffer) return;
+            let data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) { data[i] = Math.random() * 2 - 1; }
+            let noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+            let filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(180, audioCtx.currentTime);
+            let gain = audioCtx.createGain(); gain.gain.setValueAtTime(vol * 0.4, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+            noise.connect(filter); filter.connect(gain); gain.connect(masterGain);
+            noise.start(); noise.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playJumpscareScream() {
+            if (!audioCtx || !masterGain) return;
+            let duration = 1.5;
+            let bufferSize = audioCtx.sampleRate * duration;
+            let buffer = bufferSize ? audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate) : null;
+            if(!buffer) return;
+            let data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * 0.8 + Math.sin(i * 0.05) * 0.2;
+            }
+            let source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            let filter = audioCtx.createBiquadFilter();
+            filter.type = 'peaking'; filter.frequency.setValueAtTime(400, audioCtx.currentTime); filter.Q.setValueAtTime(10, audioCtx.currentTime);
+            let gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(1.5, audioCtx.currentTime); 
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            source.connect(filter); filter.connect(gain); gain.connect(masterGain);
+            source.start();
+        }
+
+        function playSparkSound() {
+            if (!audioCtx || !gameActive || !masterGain) return; 
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = 'sawtooth'; osc.connect(gain); gain.connect(masterGain);
+            osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime); gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.16);
+        }
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000); 
+        
+        const FOG_START = 2.0;
+        const FOG_END = 11.0;
+        scene.fog = new THREE.Fog(0x000000, FOG_START, FOG_END); 
+
+        let yaw = 0, pitch = 0;
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.rotation.order = 'YXZ';
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement); 
+
+        const faceCanvas = document.createElement('canvas');
+        faceCanvas.width = 512; faceCanvas.height = 512;
+        const fCtx = faceCanvas.getContext('2d');
+
+        function generateFaceTexture(time) {
+            fCtx.clearRect(0, 0, 512, 512);
+            let jX = Math.sin(time * 65) * 1.5; let jY = Math.cos(time * 55) * 1.5;
+            fCtx.fillStyle = '#000'; fCtx.fillRect(0,0,512,512);
+            fCtx.fillStyle = '#eeeeee'; fCtx.beginPath();
+            fCtx.moveTo(170 + jX, 150 + jY);
+            fCtx.bezierCurveTo(100 + jX, 190 + jY, 130 + jX, 390 + jY, 256 + jX, 450 + jY);
+            fCtx.bezierCurveTo(382 + jX, 390 + jY, 412 + jX, 190 + jY, 342 + jX, 150 + jY);
+            fCtx.bezierCurveTo(300 + jX, 110 + jY, 212 + jX, 110 + jY, 170 + jX, 150 + jY);
+            fCtx.fill();
+            fCtx.strokeStyle = '#000000'; fCtx.lineWidth = 3.5;
+            for(let i = 0; i < 32; i++) {
+                let fx = 145 + i * 7 + Math.sin(time * 8 + i) * 3;
+                fCtx.beginPath(); fCtx.moveTo(fx + jX, 115 + jY); fCtx.lineTo(fx - 6 + jX, 180 + Math.cos(i) * 14 + jY); fCtx.stroke();
+            }
+            fCtx.fillStyle = '#c81010'; fCtx.beginPath();
+            fCtx.ellipse(195 + jX, 220 + jY, 36, 24, Math.PI / 16, 0, Math.PI * 2);
+            fCtx.ellipse(315 + jX, 218 + jY, 38, 26, -Math.PI / 16, 0, Math.PI * 2);
+            fCtx.fill();
+            fCtx.fillStyle = '#000000'; fCtx.beginPath();
+            fCtx.ellipse(195 + jX, 220 + jY, 30, 19, Math.PI / 16, 0, Math.PI * 2);
+            fCtx.ellipse(315 + jX, 218 + jY, 32, 21, -Math.PI / 16, 0, Math.PI * 2);
+            fCtx.fill();
+            fCtx.fillStyle = '#2a2a2a'; fCtx.beginPath(); fCtx.arc(246 + jX, 305 + jY, 3, 0, Math.PI * 2); fCtx.arc(266 + jX, 305 + jY, 3, 0, Math.PI * 2); fCtx.fill();
+            fCtx.fillStyle = '#000000'; fCtx.beginPath();
+            fCtx.moveTo(135 + jX, 340 + jY); fCtx.bezierCurveTo(170 + jX, 315 + jY, 342 + jX, 315 + jY, 377 + jX, 340 + jY);
+            fCtx.bezierCurveTo(342 + jX, 415 + jY, 170 + jX, 415 + jY, 135 + jX, 340 + jY);
+            fCtx.fill();
+            fCtx.strokeStyle = '#ff0022'; fCtx.lineWidth = 4; fCtx.beginPath();
+            fCtx.moveTo(134 + jX, 340 + jY); fCtx.bezierCurveTo(170 + jX, 311 + jY, 342 + jX, 311 + jY, 378 + jX, 340 + jY);
+            fCtx.bezierCurveTo(342 + jX, 420 + jY, 170 + jX, 420 + jY, 134 + jX, 340 + jY);
+            fCtx.stroke();
+            fCtx.fillStyle = '#d67878'; fCtx.fillRect(175+jX, 330+jY, 160, 5); fCtx.fillRect(175+jX, 370+jY, 160, 5);
+            fCtx.fillStyle = '#fffae8'; fCtx.strokeStyle = '#2d1515'; fCtx.lineWidth = 1.2;
+            for(let i=0; i<10; i++) {
+                let tx = 180 + i * 12 + jX; let ty = 335 + jY; fCtx.fillRect(tx, ty, 8, 10); fCtx.strokeRect(tx, ty, 8, 10);
+            }
+            for(let i=0; i<10; i++) {
+                let tx = 182 + i * 11 + jX; let ty = 355 + jY; fCtx.fillRect(tx, ty, 8, 10); fCtx.strokeRect(tx, ty, 8, 10);
+            }
+        }
+
+        const chaserTexture = new THREE.CanvasTexture(faceCanvas);
+        const chaserMat = new THREE.MeshBasicMaterial({ map: chaserTexture, side: THREE.DoubleSide });
+        const chaserGeom = new THREE.PlaneGeometry(2.2, 2.2);
+        const chaserMesh = new THREE.Mesh(chaserGeom, chaserMat);
+        scene.add(chaserMesh);
+
+        const ghostCanvas = document.getElementById('curse-ghost');
+        const gCtx = ghostCanvas.getContext('2d');
+        ghostCanvas.width = 600; ghostCanvas.height = 600;
+
+        const jsCanvas = document.getElementById('jumpscare-canvas');
+        const jsCtx = jsCanvas.getContext('2d');
+        jsCanvas.width = 600; jsCanvas.height = 600;
+
+        function drawHorrorFaceToCtx(ctx, w, h, time) {
+            ctx.clearRect(0, 0, w, h);
+            let scaleX = w / 600; let scaleY = h / 600;
+            let jitterX = Math.sin(time * 75) * 4 * scaleX; let jitterY = Math.cos(time * 65) * 4 * scaleY;
+            ctx.fillStyle = 'rgba(0, 0, 0, 1)'; ctx.fillRect(0, 0, w, h);
+            ctx.fillStyle = '#eeeeee'; ctx.beginPath();
+            ctx.moveTo((200 + jitterX)*scaleX, (180 + jitterY)*scaleY);
+            ctx.bezierCurveTo((120 + jitterX)*scaleX, (220 + jitterY)*scaleY, (150 + jitterX)*scaleX, (450 + jitterY)*scaleY, (300 + jitterX)*scaleX, (520 + jitterY)*scaleY);
+            ctx.bezierCurveTo((450 + jitterX)*scaleX, (450 + jitterY)*scaleY, (480 + jitterX)*scaleX, (220 + jitterY)*scaleY, (400 + jitterX)*scaleX, (180 + jitterY)*scaleY);
+            ctx.bezierCurveTo((360 + jitterX)*scaleX, (140 + jitterY)*scaleY, (240 + jitterX)*scaleX, (140 + jitterY)*scaleY, (200 + jitterX)*scaleX, (180 + jitterY)*scaleY);
+            ctx.fill();
+            ctx.strokeStyle = '#000000'; ctx.lineWidth = 4 * scaleX;
+            for(let i = 0; i < 35; i++) {
+                let fx = 170 + i * 8 + Math.sin(time * 8 + i) * 4;
+                ctx.beginPath(); ctx.moveTo((fx + jitterX)*scaleX, (135 + jitterY)*scaleY); ctx.lineTo((fx - 8 + jitterX)*scaleX, (215 + Math.cos(i) * 15 + jitterY)*scaleY); ctx.stroke();
+            }
+            ctx.fillStyle = '#c81010'; ctx.beginPath();
+            ctx.ellipse((230 + jitterX)*scaleX, (260 + jitterY)*scaleY, 42*scaleX, 28*scaleY, Math.PI / 16, 0, Math.PI * 2);
+            ctx.ellipse((370 + jitterX)*scaleX, (258 + jitterY)*scaleY, 44*scaleX, 30*scaleY, -Math.PI / 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000000'; ctx.beginPath();
+            ctx.ellipse((230 + jitterX)*scaleX, (260 + jitterY)*scaleY, 35*scaleX, 22*scaleY, Math.PI / 16, 0, Math.PI * 2);
+            ctx.ellipse((370 + jitterX)*scaleX, (258 + jitterY)*scaleY, 37*scaleX, 24*scaleY, -Math.PI / 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc((288 + jitterX)*scaleX, (360 + jitterY)*scaleY, 4*scaleX, 0, Math.PI * 2); ctx.arc((312 + jitterX)*scaleX, (360 + jitterY)*scaleY, 4*scaleX, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#000000'; ctx.beginPath();
+            ctx.moveTo((160 + jitterX)*scaleX, (400 + jitterY)*scaleY); ctx.bezierCurveTo((200 + jitterX)*scaleX, (370 + jitterY)*scaleY, (400 + jitterX)*scaleX, (370 + jitterY)*scaleY, (440 + jitterX)*scaleX, (400 + jitterY)*scaleY);
+            ctx.bezierCurveTo((400 + jitterX)*scaleX, (490 + jitterY)*scaleY, (200 + jitterX)*scaleX, (490 + jitterY)*scaleY, (160 + jitterX)*scaleX, (400 + jitterY)*scaleY);
+            ctx.fill();
+            ctx.strokeStyle = '#ff0022'; ctx.lineWidth = 5 * scaleX; ctx.beginPath();
+            ctx.moveTo((158 + jitterX)*scaleX, (400 + jitterY)*scaleY); ctx.bezierCurveTo((200 + jitterX)*scaleX, (365 + jitterY)*scaleY, (400 + jitterX)*scaleX, (365 + jitterY)*scaleY, (442 + jitterX)*scaleX, (400 + jitterY)*scaleY);
+            ctx.bezierCurveTo((400 + jitterX)*scaleX, (495 + jitterY)*scaleY, (200 + jitterX)*scaleX, (495 + jitterY)*scaleY, (158 + jitterX)*scaleX, (400 + jitterY)*scaleY);
+            ctx.stroke();
+            ctx.fillStyle = '#fffae8'; ctx.strokeStyle = '#2d1515'; ctx.lineWidth = 1.5 * scaleX;
+            for(let i=0; i<11; i++) {
+                let tx = (210 + i * 14 + jitterX)*scaleX; let ty = (395 + jitterY)*scaleY; ctx.fillRect(tx, ty, 10*scaleX, 13*scaleY); ctx.strokeRect(tx, ty, 10*scaleX, 13*scaleY);
+            }
+            for(let i=0; i<11; i++) {
+                let tx = (212 + i * 13 + jitterX)*scaleX; let ty = (420 + jitterY)*scaleY; ctx.fillRect(tx, ty, 10*scaleX, 13*scaleY); ctx.strokeRect(tx, ty, 10*scaleX, 13*scaleY);
+            }
+        }
+
+        const wallGeo = new THREE.BoxGeometry(SCALE, 3.5, SCALE);
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a3d3b, roughness: 0.8, metalness: 0.1 });
+        const floorGeo = new THREE.PlaneGeometry(120, 120);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x1d211e, roughness: 0.7 });
+        const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+        floorMesh.rotation.x = -Math.PI / 2; floorMesh.receiveShadow = true;
+        scene.add(floorMesh);
+
+        const ceilGeo = new THREE.PlaneGeometry(120, 120);
+        const ceilMat = new THREE.MeshBasicMaterial({ color: 0x090a09 });
+        const ceilMesh = new THREE.Mesh(ceilGeo, ceilMat);
+        ceilMesh.rotation.x = Math.PI / 2; ceilMesh.position.y = 3.5;
+        scene.add(ceilMesh);
+
+        const flashlight = new THREE.SpotLight(0xfffaed, 30, 12, Math.PI / 5, 0.6, 1.2);
+        flashlight.castShadow = true; flashlight.shadow.mapSize.width = 512; flashlight.shadow.mapSize.height = 512;
+        scene.add(flashlight); scene.add(flashlight.target);
+
+        const ambientLight = new THREE.AmbientLight(0x050505); scene.add(ambientLight);
+        const playerLight = new THREE.PointLight(0xff3333, 0.4, 2.5); scene.add(playerLight);
+
+        const diaryGeom = new THREE.BoxGeometry(0.35, 0.06, 0.45);
+        const diaryMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0x442200 });
+        const diaryMesh = new THREE.Mesh(diaryGeom, diaryMat);
+        scene.add(diaryMesh);
+
+        let mazeWalls = [];
+
+        function buildMazeObjects() {
+            mazeWalls.forEach(w => scene.remove(w)); mazeWalls = [];
+            hidingPlacesInScene.forEach(h => scene.remove(h.mesh)); hidingPlacesInScene = [];
+
+            let wallMap = new Map();
+            for (let r = 0; r < mapData.length; r++) {
+                for (let c = 0; c < mapData[r].length; c++) {
+                    if (mapData[r][c] === 1) {
+                        const wMesh = new THREE.Mesh(wallGeo, wallMat);
+                        wMesh.position.set(c * SCALE, 3.5 / 2, r * SCALE);
+                        wMesh.castShadow = true; wMesh.receiveShadow = true;
+                        scene.add(wMesh); mazeWalls.push(wMesh);
+                        wallMap.set(`${c}_${r}`, true);
+                    }
+                }
+            }
+
+            let hidingCandidates = [];
+            for (let r = 1; r < mapData.length - 1; r++) {
+                for (let c = 1; c < mapData[r].length - 1; c++) {
+                    if (mapData[r][c] === 0 && 
+                        !(c === config.startGrid.x && r === config.startGrid.z) && 
+                        !(c === config.diaryGrid.x && r === config.diaryGrid.z)) {
+                        hidingCandidates.push({x: c, z: r});
+                    }
+                }
+            }
+
+            let types = ['shelf', 'closet', 'bed', 'shelf'];
+            let typeLabels = { 'shelf': '棚', 'closet': 'クローゼット', 'bed': 'ベッドの下' };
+            
+            let indices = [
+                Math.floor(hidingCandidates.length * 0.2),
+                Math.floor(hidingCandidates.length * 0.4),
+                Math.floor(hidingCandidates.length * 0.6),
+                Math.floor(hidingCandidates.length * 0.8)
+            ];
+
+            indices.forEach((idx, i) => {
+                if (idx < hidingCandidates.length) {
+                    let cand = hidingCandidates[idx];
+                    let type = types[i % 3];
+                    createHidingMesh(cand.x, cand.z, type, typeLabels[type]);
+                }
+            });
+
+            diaryMesh.position.set(config.diaryGrid.x * SCALE, 0.3, config.diaryGrid.z * SCALE);
+        }
+
+        function createHidingMesh(gridX, gridZ, type, label) {
+            let geom, mat;
+            if (type === 'shelf') {
+                geom = new THREE.BoxGeometry(0.8, 2.0, 0.8);
+                mat = new THREE.MeshStandardMaterial({ color: 0x5a3d28, roughness: 0.9 });
+            } else if (type === 'closet') {
+                geom = new THREE.BoxGeometry(1.2, 2.4, 0.7);
+                mat = new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.5, metalness: 0.5 });
+            } else if (type === 'bed') {
+                geom = new THREE.BoxGeometry(1.6, 0.8, 1.2);
+                mat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.9 });
+            }
+
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(gridX * SCALE, geom.parameters.height / 2, gridZ * SCALE);
+            scene.add(mesh);
+
+            hidingPlacesInScene.push({
+                gridX: gridX,
+                gridZ: gridZ,
+                type: type,
+                label: label,
+                mesh: mesh,
+                radius: 1.4
+            });
+        }
+
+        // 徘徊用のランダムな空き座標（床）を取得する関数
+        function getRandomPatrolNode() {
+            let emptyNodes = [];
+            for (let r = 1; r < mapData.length - 1; r++) {
+                for (let c = 1; c < mapData[r].length - 1; c++) {
+                    if (mapData[r][c] === 0) {
+                        emptyNodes.push({ x: c, z: r });
+                    }
+                }
+            }
+            if (emptyNodes.length > 0) {
+                let node = emptyNodes[Math.floor(Math.random() * emptyNodes.length)];
+                return { x: node.x * SCALE, z: node.z * SCALE };
+            }
+            return { x: config.diaryGrid.x * SCALE, z: config.diaryGrid.z * SCALE };
+        }
+
+        function resetToFloor(floor) {
+            currentFloor = floor; mapData = mazes[currentFloor]; config = floorConfigs[currentFloor];
+            hasDiary = false; diaryMesh.visible = true; isDead = false; isHiding = false; activeHidingPlace = null;
+            document.getElementById('floor-display').innerText = `【現在位置: 廃病院 ${currentFloor}階】`;
+            playerPos.x = config.startGrid.x * SCALE; playerPos.z = config.startGrid.z * SCALE; playerPos.y = PLAYER_HEIGHT;
+            velocityY = 0; isJumping = false;
+            
+            // 最初はプレイヤーから離れた位置にスポン
+            let chaserGrid = { x: mapData[0].length - 2, z: mapData.length - 2 };
+            chaserPos.x = chaserGrid.x * SCALE; chaserPos.z = chaserGrid.z * SCALE;
+            chaserMesh.position.set(chaserPos.x, 1.1, chaserPos.z);
+            
+            buildMazeObjects();
+            
+            // クロセの初期巡回ターゲット設定
+            chaserTargetNode = getRandomPatrolNode();
+            isChaserChasing = false;
+
+            blackoutCycleTimer = 0; isBlackout = false; hasPlayedWarningSound = false;
+            minimapGlobalTimer = 0; 
+            chaserSpeed = 0.026 + (floor - 1) * 0.006;
+        }
+
+        const minimapCanvas = document.getElementById('minimap');
+        const mCtx = minimapCanvas.getContext('2d');
+        minimapCanvas.width = 170; minimapCanvas.height = 170;
+
+        function drawMinimap(time) {
+            mCtx.fillStyle = '#050706'; mCtx.fillRect(0, 0, 170, 170);
+            let rows = mapData.length; let cols = mapData[0].length;
+            let cellW = 170 / cols; let cellH = 170 / rows;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (mapData[r][c] === 1) {
+                        mCtx.fillStyle = 'rgba(120, 30, 30, 0.55)';
+                        mCtx.fillRect(c * cellW, r * cellH, cellW - 1, cellH - 1);
+                    } else if (c === config.startGrid.x && r === config.startGrid.z && currentFloor === 1) {
+                        mCtx.strokeStyle = '#00ff66'; mCtx.lineWidth = 2;
+                        mCtx.strokeRect(c * cellW + 1, r * cellH + 1, cellW - 2, cellH - 2);
+                    }
+                }
+            }
+
+            hidingPlacesInScene.forEach(hp => {
+                mCtx.fillStyle = 'rgba(0, 255, 150, 0.4)';
+                mCtx.fillRect(hp.gridX * cellW + 1, hp.gridZ * cellH + 1, cellW - 2, cellH - 2);
+            });
+
+            if (!hasDiary) {
+                mCtx.fillStyle = '#ffcc00'; mCtx.beginPath();
+                mCtx.arc((config.diaryGrid.x + 0.5) * cellW, (config.diaryGrid.z + 0.5) * cellH, cellW * 0.35, 0, Math.PI * 2); mCtx.fill();
+            }
+
+            let currentCycleTime = minimapGlobalTimer % 60; 
+            let showChaserOnMinimap = (currentCycleTime < 12); 
+
+            if (showChaserOnMinimap && !isBlackout) {
+                let cx = (chaserPos.x / SCALE) * cellW; let cz = (chaserPos.z / SCALE) * cellH;
+                mCtx.fillStyle = '#ff0033'; mCtx.shadowColor = '#ff0000'; mCtx.shadowBlur = 8;
+                mCtx.beginPath(); mCtx.arc(cx, cz, cellW * 0.45, 0, Math.PI * 2); mCtx.fill();
+                mCtx.shadowBlur = 0;
+            }
+
+            let px = (playerPos.x / SCALE) * cellW; let pz = (playerPos.z / SCALE) * cellH;
+            mCtx.fillStyle = '#00ffaa'; mCtx.beginPath(); mCtx.arc(px, pz, cellW * 0.35, 0, Math.PI * 2); mCtx.fill();
+            
+            // 【修正：左右反転防止】白線の描画角度をプレイヤーの回転方向（-yaw）と完全に一致
+            mCtx.strokeStyle = '#ffffff'; mCtx.lineWidth = 1.5; mCtx.beginPath();
+            mCtx.moveTo(px, pz); 
+            mCtx.lineTo(px + Math.sin(-yaw) * 12, pz - Math.cos(-yaw) * 12); mCtx.stroke();
+        }
+
+        function checkCollision(nx, nz) {
+            let buffer = 0.32;
+            let checkPoints = [
+                {x: nx - buffer, z: nz - buffer}, {x: nx + buffer, z: nz - buffer},
+                {x: nx - buffer, z: nz + buffer}, {x: nx + buffer, z: nz + buffer}
+            ];
+            for (let p of checkPoints) {
+                let gridX = Math.floor((p.x + SCALE/2) / SCALE); let gridZ = Math.floor((p.z + SCALE/2) / SCALE);
+                if (gridZ < 0 || gridZ >= mapData.length || gridX < 0 || gridX >= mapData[0].length) return true;
+                if (mapData[gridZ][gridX] === 1) return true;
+            }
+            return false;
+        }
+
+        function checkHidingInteraction() {
+            if (!gameActive || isDead) return;
+
+            if (isHiding) {
+                exitCurrentHidingPlace();
+                return;
+            }
+
+            let closePlace = null;
+            for (let hp of hidingPlacesInScene) {
+                let dx = playerPos.x - hp.gridX * SCALE;
+                let dz = playerPos.z - hp.gridZ * SCALE;
+                let dist = Math.sqrt(dx*dx + dz*dz);
+                if (dist < hp.radius) {
+                    closePlace = hp;
+                    break;
+                }
+            }
+
+            if (closePlace) {
+                enterHidingPlace(closePlace);
+            }
+        }
+
+        function enterHidingPlace(place) {
+            isHiding = true;
+            activeHidingPlace = place;
+            playSwitchSound();
+
+            // クロセが目視追跡中だった場合は、見つかっている状態になる
+            if (isChaserLookingAtPlayer) {
+                hidingSpotted = true; 
+            } else {
+                hidingSpotted = false;
+                isChaserChasing = false; // 完全に見失う
+            }
+
+            playerPos.x = place.gridX * SCALE;
+            playerPos.z = place.gridZ * SCALE;
+            
+            document.getElementById('hiding-prompt').innerText = `【隠れ中】${place.label}に身を潜めている... (Eキーで出る)`;
+        }
+
+        function exitCurrentHidingPlace() {
+            if (!isHiding || !activeHidingPlace) return;
+
+            playSwitchSound();
+            
+            playerPos.x += Math.sin(-yaw) * 0.5;
+            playerPos.z -= Math.cos(-yaw) * 0.5;
+
+            isHiding = false;
+            activeHidingPlace = null;
+            hidingSpotted = false;
+            document.getElementById('hiding-prompt').style.display = "none";
+        }
+
+        function updatePlayerMovement(time) {
+            if (!isHiding) {
+                let closePlace = null;
+                for (let hp of hidingPlacesInScene) {
+                    let dx = playerPos.x - hp.gridX * SCALE;
+                    let dz = playerPos.z - hp.gridZ * SCALE;
+                    let dist = Math.sqrt(dx*dx + dz*dz);
+                    if (dist < hp.radius) {
+                        closePlace = hp;
+                        break;
+                    }
+                }
+                if (closePlace) {
+                    const prompt = document.getElementById('hiding-prompt');
+                    prompt.innerText = `[Eキー] を押して ${closePlace.label} に隠れる`;
+                    prompt.style.display = "block";
+                } else {
+                    document.getElementById('hiding-prompt').style.display = "none";
+                }
+            } else {
+                document.getElementById('hiding-prompt').block;
+                camera.position.set(playerPos.x, playerPos.y, playerPos.z);
+                playerLight.position.set(playerPos.x, playerPos.y, playerPos.z);
+                return;
+            }
+
+            if (keys['shift'] && stamina > 5 && !staminaExhausted && (keys['w'] || keys['s'] || keys['a'] || keys['d'])) {
+                isSprinting = true; stamina = Math.max(0, stamina - 0.55); if (stamina <= 0) staminaExhausted = true;
+            } else {
+                isSprinting = false; stamina = Math.min(100, stamina + 0.25); if (stamina >= 25) staminaExhausted = false;
+            }
+            document.getElementById('stamina-bar').style.width = `${stamina}%`;
+            document.getElementById('stamina-bar').style.background = staminaExhausted ? '#ff3333' : (isSprinting ? '#ffcc00' : '#00ffaa');
+
+            let moveSpeed = isSprinting ? SPRINT_PLAYER_SPEED : BASE_PLAYER_SPEED;
+            let forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            let right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            let moveVec = new THREE.Vector3();
+
+            if (keys['w']) moveVec.add(forward); if (keys['s']) moveVec.sub(forward);
+            if (keys['d']) moveVec.add(right); if (keys['a']) moveVec.sub(right);
+            if (moveVec.lengthSq() > 0) {
+                moveVec.normalize().multiplyScalar(moveSpeed);
+                let nextX = playerPos.x + moveVec.x; let nextZ = playerPos.z + moveVec.z;
+                if (!checkCollision(nextX, playerPos.z)) playerPos.x = nextX;
+                if (!checkCollision(playerPos.x, nextZ)) playerPos.z = nextZ;
+                if (time >= nextPlayerFootTime) { playPlayerFootstep(isSprinting); nextPlayerFootTime = time + (isSprinting ? 0.18 : 0.32); }
+                
+                // 走っている足音は少し遠くからでもクロセを引き寄せる
+                if (isSprinting && !isHiding) {
+                    let pdx = playerPos.x - chaserPos.x; let pdz = playerPos.z - chaserPos.z;
+                    if (Math.sqrt(pdx*pdx + pdz*pdz) < SCALE * 5.0) {
+                        isChaserChasing = true; 
+                    }
+                }
+            }
+
+            if (keys[' '] && !isJumping) { isJumping = true; velocityY = JUMP_FORCE; }
+            if (isJumping) { playerPos.y += velocityY; velocityY += GRAVITY; if (playerPos.y <= PLAYER_HEIGHT) { playerPos.y = PLAYER_HEIGHT; isJumping = false; velocityY = 0; } }
+
+            camera.position.set(playerPos.x, playerPos.y, playerPos.z);
+            playerLight.position.set(playerPos.x, playerPos.y, playerPos.z);
+        }
+
+        // --- 改良版：クロセのAIロジック ---
+        function updateChaserAI(time) {
+            let dx = playerPos.x - chaserPos.x; let dz = playerPos.z - chaserPos.z;
+            let dist = Math.sqrt(dx*dx + dz*dz);
+
+            // 1. 視線（障害物）チェック
+            let isSighted = false;
+            if (!isHiding && dist < SCALE * 6.5) {
+                let segments = 10; let clear = true;
+                for (let i = 1; i < segments; i++) {
+                    let tx = chaserPos.x + dx * (i / segments); let tz = chaserPos.z + dz * (i / segments);
+                    let gx = Math.floor((tx + SCALE/2) / SCALE); let gz = Math.floor((tz + SCALE/2) / SCALE);
+                    if (gz >= 0 && gz < mapData.length && gx >= 0 && gx < mapData[0].length) { 
+                        if (mapData[gz][gx] === 1) { clear = false; break; } 
+                    }
+                }
+                if (clear) isSighted = true;
+            }
+            isChaserLookingAtPlayer = isSighted;
+
+            // 2. 状態による分岐
+            if (isHiding && activeHidingPlace) {
+                // 【隠れている場合】
+                if (hidingSpotted) {
+                    // 目前で隠れた場合はバレて襲ってくる
+                    let targetX = activeHidingPlace.gridX * SCALE;
+                    let targetZ = activeHidingPlace.gridZ * SCALE;
+                    let tdx = targetX - chaserPos.x; let tdz = targetZ - chaserPos.z;
+                    let tdist = Math.sqrt(tdx*tdx + tdz*tdz);
+                    if (tdist > 0.1) {
+                        chaserPos.x += (tdx / tdist) * chaserSpeed * 1.5; chaserPos.z += (tdz / tdist) * chaserSpeed * 1.5;
+                    }
+                    if (tdist < 0.4) { triggerJumpscare(); return; }
+                } else {
+                    // バレずに隠れられたら、やり過ごせる（付近を通り過ぎて別のランダムな場所へ向かう）
+                    let tdx = chaserTargetNode.x - chaserPos.x; let tdz = chaserTargetNode.z - chaserPos.z;
+                    let tdist = Math.sqrt(tdx*tdx + tdz*tdz);
+                    if (tdist < 0.3) { chaserTargetNode = getRandomPatrolNode(); }
+                    else {
+                        chaserPos.x += (tdx / tdist) * chaserSpeed * 0.85; chaserPos.z += (tdz / tdist) * chaserSpeed * 0.85;
+                    }
+                }
+            } 
+            else if (isSighted || isChaserChasing) {
+                // 【追跡モード：近くにいる・見えている・足音で気づかれた】
+                isChaserChasing = true; 
+                chaserPos.x += (dx / dist) * chaserSpeed * 1.5; chaserPos.z += (dz / dist) * chaserSpeed * 1.5;
+                
+                if (isSighted && dist < 4.0 && Math.random() < 0.006) {
+                    let speech = document.getElementById('chaser-speech-overlay');
+                    speech.innerText = horrorVoices[Math.floor(Math.random() * horrorVoices.length)];
+                    speech.style.display = 'block'; setTimeout(() => { speech.style.display = 'none'; }, 1200);
+                }
+                
+                // 距離をかなり離されると見失う
+                if (dist > SCALE * 7.5) { isChaserChasing = false; chaserTargetNode = getRandomPatrolNode(); }
+            } 
+            else {
+                // 【通常徘徊モード：病院内をさまよう】
+                let tdx = chaserTargetNode.x - chaserPos.x; let tdz = chaserTargetNode.z - chaserPos.z;
+                let tdist = Math.sqrt(tdx*tdx + tdz*tdz);
+                
+                if (tdist < 0.4) {
+                    chaserTargetNode = getRandomPatrolNode(); // 目的地に着いたら次の場所へ
+                } else {
+                    chaserPos.x += (tdx / tdist) * chaserSpeed * 0.9; chaserPos.z += (tdz / tdist) * chaserSpeed * 0.9;
+                }
+
+                // さまよっている最中、突如近くをプレイヤーが通りかかったら補足
+                if (dist < SCALE * 3.5) { isChaserChasing = true; }
+            }
+
+            chaserMesh.position.set(chaserPos.x, 1.1, chaserPos.z);
+            chaserMesh.lookAt(camera.position.x, 1.1, camera.position.z);
+
+            let alertUi = document.getElementById('yusei-alert');
+            if (isChaserChasing && dist < SCALE * 4.0) { alertUi.style.display = 'block'; } else { alertUi.style.display = 'none'; }
+
+            if (time >= nextBgmStepTime) { playDynamicBgmStep(dist, isSighted); let interval = 0.45 - (Math.max(0, Math.min(1.0, 1.0 - (dist / (SCALE * 6.5)))) * 0.32); nextBgmStepTime = time + interval; }
+            if (time >= nextHeartbeatTime) { let severity = Math.max(0, Math.min(1.0, 1.0 - (dist / (SCALE * 5.0)))); if (severity > 0.1) { playHeartbeat(severity); } nextHeartbeatTime = time + (1.0 - severity * 0.75); }
+            if (time >= nextChaserFootTime) { let vol = Math.max(0, Math.min(1.0, 1.0 - (dist / (SCALE * 6.0)))); if (vol > 0.05 && !isBlackout) { playChaserFootstep(vol); } nextChaserFootTime = time + 0.28; }
+
+            if (dist < 0.65 && !isDead && !isHiding) {
+                triggerJumpscare();
+            }
+        }
+
+        function triggerJumpscare() {
+            isDead = true; gameActive = false;
+            document.exitPointerLock();
+            playJumpscareScream();
+            document.getElementById('jumpscare-overlay').style.display = 'flex';
+            setTimeout(() => {
+                document.getElementById('jumpscare-overlay').style.display = 'none';
+                document.getElementById('screen-overlay').style.display = 'flex';
+                document.getElementById('msg').innerHTML = `<span style="color:#ff0000;font-size:32px;text-shadow:0 0 10px #ff0000;">【精神崩壊：GAME OVER】</span><br><br>廃病院の闇に潜む「くろせ」の毒牙にかかり、あなたの意識は永遠に消失した…`;
+                document.getElementById('action-btn').innerText = "もう一度潜入する";
+            }, 2500);
+        }
+
+        function checkItemCollisions() {
+            if (isHiding) return; 
+
+            if (!hasDiary) {
+                let dx = playerPos.x - config.diaryGrid.x * SCALE; let dz = playerPos.z - config.diaryGrid.z * SCALE;
+                if (Math.sqrt(dx*dx + dz*dz) < 0.8) {
+                    hasDiary = true; diaryMesh.visible = false; gameActive = false;
+                    document.exitPointerLock();
+                    document.getElementById('diary-content').innerText = diaryTexts[currentFloor];
+                    document.getElementById('diary-overlay').style.display = 'flex';
+                }
+            } else {
+                let dx = playerPos.x - config.startGrid.x * SCALE; let dz = playerPos.z - config.startGrid.z * SCALE;
+                if (Math.sqrt(dx*dx + dz*dz) < 0.8) {
+                    gameActive = false; document.exitPointerLock();
+                    if (currentFloor < 3) {
+                        document.getElementById('screen-overlay').style.display = 'flex';
+                        document.getElementById('msg').innerHTML = `<span style="color:#00ffaa;font-size:32px;">【フロア走破成功】</span><br><br>田中チー牛１１歳の日記の回収に成功した。しかし、更なる怨念が上層から響き渡る…`;
+                        document.getElementById('action-btn').innerText = `${currentFloor + 1}階へ進む`;
+                    } else {
+                        document.getElementById('screen-overlay').style.display = 'flex';
+                        document.getElementById('msg').innerHTML = `<span style="color:#ffff00;font-size:36px;text-shadow:0 0 20px #ffff00;">【完全大脱出成功】</span><br><br>おめでとう！全ての謎と恐怖を乗り越え、あなたはこの地獄の廃病院から生きて帰還した！`;
+                        document.getElementById('action-btn').innerText = "最初から遊ぶ";
+                    }
+                }
+            }
+        }
+
+        function updateEnvironmentLights(time, deltaTime) {
+            blackoutCycleTimer += deltaTime;
+            minimapGlobalTimer += deltaTime; 
+
+            if (blackoutCycleTimer >= 30.0) { blackoutCycleTimer = 0; isBlackout = false; hasPlayedWarningSound = false; document.getElementById('game-body').classList.remove('blackout-glitch'); }
+            else if (blackoutCycleTimer >= 28.0) {
+                if (!isBlackout) { isBlackout = true; playSparkSound(); document.getElementById('game-body').classList.add('blackout-glitch'); }
+            } else if (blackoutCycleTimer >= 25.0) {
+                if (!hasPlayedWarningSound) { hasPlayedWarningSound = true; playSparkSound(); }
+                if (Math.random() < 0.18) { flashlight.intensity = Math.random() * 4; } else { flashlight.intensity = 25; }
+            } else {
+                flashlight.intensity = isFlashlightOn ? 25 : 0;
+            }
+
+            if (isBlackout) {
+                flashlight.intensity = 0; ambientLight.intensity = 0; playerLight.intensity = 0.02;
+                if (Math.random() < 0.08) {
+                    document.getElementById('curse-overlay').style.display = 'flex';
+                    document.getElementById('curse-ghost').style.opacity = Math.random() * 0.45;
+                } else { document.getElementById('curse-overlay').style.display = 'none'; }
+            } else {
+                ambientLight.intensity = 0x05 / 255; playerLight.intensity = 0.4;
+                document.getElementById('curse-overlay').style.display = 'none';
+            }
+
+            let forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).applyAxisAngle(new THREE.Vector3(1, 0, 0), pitch);
+            flashlight.position.copy(camera.position); flashlight.target.position.copy(camera.position).add(forward);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            let k = e.key.toLowerCase(); keys[k] = true;
+            if (k === 'q' && gameActive && !isDead && !isBlackout) { isFlashlightOn = !isFlashlightOn; playSwitchSound(); }
+            if (k === 'e' && gameActive && !isDead) { checkHidingInteraction(); } 
+        });
+        window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+        window.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement !== container) return;
+            yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022;
+            pitch = Math.max(-Math.PI / 2.8, Math.min(Math.PI / 2.8, pitch));
+            camera.rotation.set(pitch, yaw, 0); 
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.getElementById('start-screen').style.display = 'none'; initAudio(); resetToFloor(1); gameActive = true; container.requestPointerLock();
+        });
+        document.getElementById('diary-close-btn').addEventListener('click', () => {
+            document.getElementById('diary-overlay').style.display = 'none'; gameActive = true; container.requestPointerLock();
+        });
+        document.getElementById('action-btn').addEventListener('click', () => {
+            document.getElementById('screen-overlay').style.display = 'none';
+            initAudio();
+            let msgText = document.getElementById('msg').innerText;
+            if (msgText.includes('脱出') || msgText.includes('消失') || msgText.includes('精神崩壊')) { resetToFloor(1); } else { resetToFloor(currentFloor + 1); }
+            gameActive = true; container.requestPointerLock();
+        });
+
+        container.addEventListener('click', () => {
+            if (gameActive && document.pointerLockElement !== container) container.requestPointerLock();
+        });
+
+        buildMazeObjects();
+
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+            const deltaTime = Math.min(0.1, clock.getDelta()); 
+
+            if (gameActive && !isDead) {
+                updateEnvironmentLights(time, deltaTime);
+                updatePlayerMovement(time);
+                updateChaserAI(time);
+                checkItemCollisions();
+            }
+
+            if (gameActive && !isDead) {
+                generateFaceTexture(time);
+                chaserTexture.needsUpdate = true;
+                drawHorrorFaceToCtx(gCtx, 600, 600, time);
+            }
+            
+            if (isDead && document.getElementById('jumpscare-overlay').style.display === 'flex') {
+                drawHorrorFaceToCtx(jsCtx, 600, 600, time);
+            }
+
+            if (gameActive) drawMinimap(time);
+
+            if (!hasDiary) {
+                diaryMesh.rotation.y += 0.02;
+                diaryMesh.position.y = 0.3 + Math.sin(time * 3) * 0.06;
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
