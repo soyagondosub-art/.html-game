@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>오징어 서바이벌 - 3D Death Game</title>
+<style>
+    :root { --pink: #E2307C; --teal: #00B8B2; --dark: #121212; --light: #F0F0F0; --red: #ff3333; --blue: #3333ff; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--dark); color: var(--light); font-family: sans-serif; overflow: hidden; user-select: none; }
+    #canvas-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+    canvas { display: block; }
+    .ui-layer { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
+    .ui-layer > * { pointer-events: auto; }
+    #lobby-ui, #result-ui { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: rgba(0,0,0,0.9); }
+    #lobby-ui h1 { font-size: 3rem; color: var(--pink); text-shadow: 0 0 20px var(--pink); margin-bottom: 1rem; }
+    .btn { padding: 15px 40px; font-size: 1.2rem; border: 2px solid var(--teal); background: transparent; color: var(--teal); cursor: pointer; margin: 10px; font-weight: bold; transition: all 0.3s; }
+    .btn:hover { background: var(--teal); color: var(--dark); box-shadow: 0 0 30px var(--teal); }
+    .btn.pink { border-color: var(--pink); color: var(--pink); }
+    .btn.pink:hover { background: var(--pink); color: var(--light); box-shadow: 0 0 30px var(--pink); }
+    #room-info { margin-top: 20px; font-size: 1.2rem; color: #fff; font-weight: bold; }
+    #game-hud { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    #timer-bar { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 60%; height: 10px; background: #333; border: 1px solid #555; }
+    #timer-fill { height: 100%; background: var(--pink); width: 100%; transition: width 0.1s linear; box-shadow: 0 0 10px var(--pink); }
+    #message-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; font-weight: 900; color: var(--light); text-shadow: 0 0 20px #000, 0 0 40px var(--pink); opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; white-space: nowrap; }
+    #alive-count { position: absolute; top: 40px; right: 40px; font-size: 1.5rem; color: var(--teal); }
+    #stage-info { position: absolute; top: 40px; left: 40px; font-size: 1.5rem; color: var(--pink); }
+    #flash-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: red; opacity: 0; pointer-events: none; z-index: 20; mix-blend-mode: multiply; }
+    #vignette { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: radial-gradient(circle, transparent 50%, rgba(0,0,0,0.8) 100%); pointer-events: none; z-index: 15; }
+    .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+    @keyframes shake { 10%, 90% { transform: translate3d(-2px, 0, 0); } 20%, 80% { transform: translate3d(4px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-8px, 0, 0); } 40%, 60% { transform: translate3d(8px, 0, 0); } }
+    
+    /* Stage Specific UI */
+    #stage2-ui, #stage3-ui, #stage4-ui { display: none; position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; border: 2px solid var(--pink); }
+    #rope-bar { width: 400px; height: 30px; background: #333; position: relative; margin: 10px auto; border: 2px solid #fff; }
+    #rope-marker { position: absolute; top: -5px; width: 10px; height: 40px; background: var(--pink); left: 50%; transform: translateX(-50%); transition: left 0.1s; }
+    .room-choice { display: inline-block; width: 150px; height: 150px; margin: 20px; cursor: pointer; border: 4px solid #fff; font-size: 2rem; line-height: 150px; font-weight: bold; }
+    .room-choice.red { background: var(--red); }
+    .room-choice.blue { background: var(--blue); }
+    .room-choice.selected { border-color: var(--teal); box-shadow: 0 0 30px var(--teal); }
+    #janken-ui { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 30px; border-radius: 15px; border: 3px solid var(--pink); text-align: center; }
+    .janken-hand { font-size: 4rem; margin: 0 20px; cursor: pointer; border: 3px solid transparent; padding: 10px; border-radius: 10px; transition: all 0.2s; }
+    .janken-hand:hover { border-color: var(--teal); }
+    .janken-hand.selected { border-color: var(--pink); background: rgba(226, 48, 124, 0.3); }
+    #tako-hands { font-size: 5rem; margin-bottom: 20px; color: var(--pink); text-shadow: 0 0 20px var(--pink); }
+    #final-decision { display: none; margin-top: 20px; font-size: 1.5rem; color: #fff; }
+    .final-btn { padding: 10px 30px; font-size: 1.5rem; margin: 0 10px; cursor: pointer; border: 2px solid #fff; background: transparent; color: #fff; font-weight: bold; }
+    .final-btn:hover { background: #fff; color: #000; }
+    .final-btn.selected { background: var(--teal); border-color: var(--teal); color: #000; }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="vignette"></div>
+<div id="flash-overlay"></div>
+
+<div class="ui-layer">
+    <div id="lobby-ui">
+        <h1>오징어 서바이벌</h1>
+        <p>最大30人 — 4桁ルーム番号制</p>
+        <div>
+            <button class="btn pink" id="btn-host">ルームを作る (HOST)</button>
+            <button class="btn" id="btn-join">参加する (CLIENT)</button>
+        </div>
+        <div id="room-info"></div>
+    </div>
+
+    <div id="game-hud">
+        <div id="timer-bar"><div id="timer-fill"></div></div>
+        <div id="alive-count">生存: 30 / 30</div>
+        <div id="stage-info">STAGE 1</div>
+        <div id="message-overlay"></div>
+        
+        <div id="stage2-ui">
+            <h2>デス綱引き</h2>
+            <p>スペースキーを猛連打せよ！</p>
+            <div id="rope-bar"><div id="rope-marker"></div></div>
+            <p id="team-info">Team: -</p>
+        </div>
+
+        <div id="stage3-ui">
+            <h2>赤青ルーム</h2>
+            <p>人数が多い方の部屋が全滅する</p>
+            <div id="room-counts">赤: 0 / 青: 0</div>
+            <div class="room-choice red" id="btn-red">赤</div>
+            <div class="room-choice blue" id="btn-blue">青</div>
+        </div>
+
+        <div id="stage4-ui">
+            <h2>最終ステージ：じゃんけん</h2>
+            <div id="tako-hands"></div>
+            <p>左手と右手に出す手を選べ</p>
+            <div id="hand-selection">
+                <span class="janken-hand" data-hand="rock" data-slot="left">✊</span>
+                <span class="janken-hand" data-hand="paper" data-slot="left">✋</span>
+                <span class="janken-hand" data-hand="scissors" data-slot="left">✌️</span>
+                <br>
+                <span class="janken-hand" data-hand="rock" data-slot="right">✊</span>
+                <span class="janken-hand" data-hand="paper" data-slot="right">✋</span>
+                <span class="janken-hand" data-hand="scissors" data-slot="right">✌️</span>
+            </div>
+            <div id="final-decision">
+                <p>どちらの手を確定させる？</p>
+                <button class="final-btn" id="btn-final-left">左手</button>
+                <button class="final-btn" id="btn-final-right">右手</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="result-ui" style="display:none;">
+        <h2 id="result-text"></h2>
+        <button class="btn pink" id="btn-restart">もう一度プレイ</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+<script>
+// ==========================================
+// Global Config & State
+// ==========================================
+const CONFIG = {
+    MAX_PLAYERS: 30,
+    MOVE_SPEED: 0.15,
+    DETECTION_THRESHOLD: 0.02,
+    STAGE1_TIME: 45,
+    STAGE2_TIME: 10,
+    STAGE3_TIME: 15,
+    STAGE4_TIME: 5,
+    DARUMAN_BACK_TIME: 2.0,
+    DARUMAN_LOOK_TIME: 1.5
+};
+
+const STATE = {
+    phase: 'lobby', // lobby, stage1, stage2, stage3, stage4, gameover
+    isHost: false,
+    peerId: null,
+    hostId: null,
+    roomId: '',
+    connections: [],
+    hostConn: null,
+    players: {},
+    myId: null,
+    myInput: { x: 0, z: 0, mash: 0, roomChoice: null, jankenLeft: null, jankenRight: null, jankenFinal: null },
+    stageData: {
+        timer: 0,
+        // Stage 1
+        darumanState: 'back',
+        darumanTimer: 0,
+        // Stage 2
+        ropePosition: 0,
+        teamAForce: 0,
+        teamBForce: 0,
+        falling: false,
+        // Stage 3
+        redCount: 0,
+        blueCount: 0,
+        // Stage 4
+        takoHands: [],
+        playerChoices: {}
+    }
+};
+
+// ==========================================
+// Three.js Setup
+// ==========================================
+let scene, camera, renderer, clock;
+let darumanGroup, darumanHead, darumanEyeLight;
+let playerMeshes = {};
+let particleSystem, particles = [];
+let floorLeft, floorRight, ropeMesh;
+let redRoomZone, blueRoomZone;
+let laserMeshes = [];
+let thunderMesh;
+
+function initThree() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a0a);
+    scene.fog = new THREE.FogExp2(0x0a0a0a, 0.015);
+
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 10, 20);
+    camera.lookAt(0, 2, 0);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    clock = new THREE.Clock();
+
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    scene.add(ambientLight);
+
+    const spotLight = new THREE.SpotLight(0xffffff, 1.0);
+    spotLight.position.set(0, 30, 10);
+    spotLight.castShadow = true;
+    scene.add(spotLight);
+
+    createEnvironment();
+    createDaruman();
+    createPlayers();
+    createParticleSystem();
+    createStageObjects();
+
+    window.addEventListener('resize', onWindowResize);
+}
+
+function createEnvironment() {
+    const floorGeo = new THREE.PlaneGeometry(100, 100);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(100, 30, 1), wallMat);
+    backWall.position.set(0, 15, -40);
+    scene.add(backWall);
+}
+
+function createDaruman() {
+    darumanGroup = new THREE.Group();
+    darumanGroup.position.set(0, 0, -30);
+
+    const bodyGeo = new THREE.CylinderGeometry(3, 4, 8, 32);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x800080, roughness: 0.4 }); // Purple Octopus
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 4;
+    darumanGroup.add(body);
+
+    darumanHead = new THREE.Group();
+    darumanHead.position.y = 10;
+    
+    const headGeo = new THREE.SphereGeometry(3, 32, 32);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0x990099, roughness: 0.3 });
+    const head = new THREE.Mesh(headGeo, headMat);
+    darumanHead.add(head);
+
+    const eyeGeo = new THREE.SphereGeometry(0.8, 16, 16);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0 });
+    
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(-1.2, 0.5, 2.5);
+    darumanHead.add(leftEye);
+
+    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+    rightEye.position.set(1.2, 0.5, 2.5);
+    darumanHead.add(rightEye);
+
+    darumanEyeLight = new THREE.PointLight(0xffff00, 0, 20);
+    darumanEyeLight.position.set(0, 10.5, 28);
+    scene.add(darumanEyeLight);
+
+    darumanGroup.add(darumanHead);
+    scene.add(darumanGroup);
+}
+
+function createPlayers() {
+    const geo = new THREE.CapsuleGeometry(0.5, 1.5, 4, 8);
+    for (let i = 1; i <= CONFIG.MAX_PLAYERS; i++) {
+        const mat = new THREE.MeshStandardMaterial({ color: 0x00ff88, roughness: 0.5, emissive: 0x002211 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.castShadow = true;
+        mesh.visible = false;
+        mesh.velocity = new THREE.Vector3();
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = 128; canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000'; ctx.fillRect(0,0,128,128);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 80px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(String(i).padStart(3, '0'), 64, 64);
+        
+        const tex = new THREE.CanvasTexture(canvas);
+        const tagGeo = new THREE.PlaneGeometry(0.8, 0.8);
+        const tagMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+        const tag = new THREE.Mesh(tagGeo, tagMat);
+        tag.position.y = 2;
+        mesh.add(tag);
+
+        scene.add(mesh);
+        playerMeshes[i] = mesh;
+    }
+}
+
+function createParticleSystem() {
+    const particleGeo = new THREE.BufferGeometry();
+    const particleCount = 2000;
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const particleMat = new THREE.PointsMaterial({
+        size: 0.3, vertexColors: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending
+    });
+
+    particleSystem = new THREE.Points(particleGeo, particleMat);
+    scene.add(particleSystem);
+
+    for (let i = 0; i < particleCount; i++) {
+        particles.push({ pos: new THREE.Vector3(0, -100, 0), vel: new THREE.Vector3(), life: 0, index: i, color: new THREE.Color(0x800080) });
+    }
+}
+
+function createStageObjects() {
+    // Stage 2: Rope and Split Floors
+    const ropeGeo = new THREE.CylinderGeometry(0.2, 0.2, 40, 8);
+    ropeGeo.rotateZ(Math.PI / 2);
+    const ropeMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+    ropeMesh = new THREE.Mesh(ropeGeo, ropeMat);
+    ropeMesh.position.set(0, 1, 0);
+    ropeMesh.visible = false;
+    scene.add(ropeMesh);
+
+    const floorSplitGeo = new THREE.PlaneGeometry(40, 40);
+    const floorLeftMat = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide });
+    floorLeft = new THREE.Mesh(floorSplitGeo, floorLeftMat);
+    floorLeft.rotation.x = -Math.PI / 2;
+    floorLeft.position.set(-20, 0, 0);
+    floorLeft.visible = false;
+    scene.add(floorLeft);
+
+    const floorRightMat = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide });
+    floorRight = new THREE.Mesh(floorSplitGeo, floorRightMat);
+    floorRight.rotation.x = -Math.PI / 2;
+    floorRight.position.set(20, 0, 0);
+    floorRight.visible = false;
+    scene.add(floorRight);
+
+    // Stage 3: Red/Blue Zones
+    const zoneGeo = new THREE.PlaneGeometry(30, 30);
+    const redMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0x550000, transparent: true, opacity: 0.6 });
+    redRoomZone = new THREE.Mesh(zoneGeo, redMat);
+    redRoomZone.rotation.x = -Math.PI / 2;
+    redRoomZone.position.set(-20, 0.1, 0);
+    redRoomZone.visible = false;
+    scene.add(redRoomZone);
+
+    const blueMat = new THREE.MeshStandardMaterial({ color: 0x0000ff, emissive: 0x000055, transparent: true, opacity: 0.6 });
+    blueRoomZone = new THREE.Mesh(zoneGeo, blueMat);
+    blueRoomZone.rotation.x = -Math.PI / 2;
+    blueRoomZone.position.set(20, 0.1, 0);
+    blueRoomZone.visible = false;
+    scene.add(blueRoomZone);
+
+    // Lasers for Stage 3
+    for(let i=0; i<10; i++) {
+        const laserGeo = new THREE.CylinderGeometry(0.5, 0.5, 50, 8);
+        const laserMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0 });
+        const laser = new THREE.Mesh(laserGeo, laserMat);
+        laser.position.set(0, 25, 0);
+        scene.add(laser);
+        laserMeshes.push(laser);
+    }
+
+    // Thunder for Stage 4
+    const thunderGeo = new THREE.CylinderGeometry(0.2, 1, 30, 8);
+    const thunderMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0 });
+    thunderMesh = new THREE.Mesh(thunderGeo, thunderMat);
+    thunderMesh.position.set(0, 15, 0);
+    scene.add(thunderMesh);
+}
+
+function emitInk(x, y, z, count = 100, color = new THREE.Color(0x800080)) {
+    let c = 0;
+    for (let p of particles) {
+        if (p.life <= 0 && c < count) {
+            p.pos.set(x, y, z);
+            p.vel.set((Math.random() - 0.5) * 0.8, Math.random() * 0.8, (Math.random() - 0.5) * 0.8);
+            p.life = 1.5;
+            p.color = color;
+            c++;
+        }
+    }
+}
+
+function updateParticles(delta) {
+    const positions = particleSystem.geometry.attributes.position.array;
+    const colors = particleSystem.geometry.attributes.color.array;
+
+    for (let p of particles) {
+        if (p.life > 0) {
+            p.life -= delta * 1.5;
+            p.pos.add(p.vel);
+            p.vel.y -= delta * 0.05;
+
+            positions[p.index * 3] = p.pos.x;
+            positions[p.index * 3 + 1] = p.pos.y;
+            positions[p.index * 3 + 2] = p.pos.z;
+
+            colors[p.index * 3] = p.color.r;
+            colors[p.index * 3 + 1] = p.color.g;
+            colors[p.index * 3 + 2] = p.color.b;
+        } else {
+            positions[p.index * 3 + 1] = -100;
+        }
+    }
+    particleSystem.geometry.attributes.position.needsUpdate = true;
+    particleSystem.geometry.attributes.color.needsUpdate = true;
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ==========================================
+// PeerJS Network Logic
+// ==========================================
+function initPeer(isHost) {
+    STATE.isHost = isHost;
+    
+    if (isHost) {
+        let code = Math.floor(1000 + Math.random() * 9000).toString();
+        let peer = new Peer('ika-' + code);
+        peer.on('open', (id) => {
+            STATE.peerId = id;
+            STATE.myId = id;
+            STATE.roomId = code;
+            document.getElementById('room-info').innerText = `ルーム番号: ${code} (HOST)`;
+            initHost(peer);
+        });
+        peer.on('error', (err) => {
+            if (err.type === 'unavailable-id') {
+                initPeer(true); // Retry with new code
+            } else {
+                alert("接続エラー: " + err.type);
+            }
+        });
+    } else {
+        const code = prompt("4桁の部屋番号を入力してください:");
+        if (!code || code.length !== 4) { alert("無効な番号です"); return; }
+        
+        let peer = new Peer();
+        peer.on('open', (id) => {
+            STATE.peerId = id;
+            STATE.myId = id;
+            STATE.roomId = code;
+            STATE.hostId = 'ika-' + code;
+            initClient(peer, STATE.hostId);
+        });
+        peer.on('error', (err) => alert("接続エラー: " + err.type));
+    }
+}
+
+function initHost(peer) {
+    peer.on('connection', (conn) => {
+        if (STATE.connections.length >= CONFIG.MAX_PLAYERS - 1) { conn.close(); return; }
+        STATE.connections.push(conn);
+        const playerId = STATE.connections.length + 1;
+        
+        conn.on('open', () => {
+            STATE.players[conn.peer] = { id: playerId, x: 0, z: 15, alive: true, isMe: false, input: {} };
+            broadcastState();
+        });
+
+        conn.on('data', (data) => {
+            if (data.type === 'input' && STATE.players[conn.peer]) {
+                Object.assign(STATE.players[conn.peer].input, data.input);
+            }
+        });
+
+        conn.on('close', () => {
+            const idx = STATE.connections.indexOf(conn);
+            if (idx > -1) STATE.connections.splice(idx, 1);
+            delete STATE.players[conn.peer];
+            broadcastState();
+        });
+    });
+
+    STATE.players[STATE.myId] = { id: 1, x: 0, z: 15, alive: true, isMe: true, input: {} };
+}
+
+function initClient(peer, hostId) {
+    const conn = peer.connect(hostId);
+    STATE.hostConn = conn;
+
+    conn.on('open', () => {
+        document.getElementById('lobby-ui').style.display = 'none';
+        document.getElementById('game-hud').style.display = 'block';
+    });
+
+    conn.on('data', (data) => {
+        if (data.type === 'state') updateFromHost(data.state);
+        else if (data.type === 'effect') triggerEffect(data.effect);
+    });
+}
+
+function broadcastState() {
+    if (!STATE.isHost) return;
+    const compressedPlayers = {};
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        compressedPlayers[pid] = { id: p.id, x: Math.round(p.x*100)/100, z: Math.round(p.z*100)/100, alive: p.alive, isMe: p.isMe, team: p.team, roomChoice: p.roomChoice, janken: p.janken };
+    }
+
+    const payload = { type: 'state', state: { phase: STATE.phase, players: compressedPlayers, stageData: STATE.stageData, myId: STATE.myId } };
+    for (let conn of STATE.connections) { if (conn.open) conn.send(payload); }
+    updateFromHost(payload.state);
+}
+
+function sendInput() {
+    if (STATE.isHost || !STATE.hostConn || !STATE.hostConn.open) return;
+    STATE.hostConn.send({ type: 'input', input: STATE.myInput });
+}
+
+function triggerEffect(effectName) {
+    if (effectName === 'eliminate') { flashScreen(); shakeCamera(); }
+    else if (effectName === 'turn') { /* sound */ }
+    else if (effectName === 'thunder') { flashScreen(); shakeCamera(); }
+}
+
+function flashScreen() {
+    const el = document.getElementById('flash-overlay');
+    el.style.opacity = 0.8;
+    setTimeout(() => { el.style.opacity = 0; }, 100);
+}
+
+function shakeCamera() {
+    document.getElementById('canvas-container').classList.add('shake');
+    setTimeout(() => document.getElementById('canvas-container').classList.remove('shake'), 500);
+}
+
+// ==========================================
+// Game Logic (Host Authority)
+// ==========================================
+function startGame() {
+    if (!STATE.isHost) return;
+    STATE.phase = 'stage1';
+    STATE.stageData.timer = CONFIG.STAGE1_TIME;
+    STATE.stageData.darumanState = 'back';
+    STATE.stageData.darumanTimer = CONFIG.DARUMAN_BACK_TIME;
+    
+    let i = 1;
+    for (let pid in STATE.players) {
+        STATE.players[pid].alive = true;
+        STATE.players[pid].x = (Math.random() - 0.5) * 20;
+        STATE.players[pid].z = 25;
+        STATE.players[pid].id = i++;
+        STATE.players[pid].movedWhileBack = false;
+    }
+    broadcastState();
+    showMessage("STAGE 1: だるまさんが転んだ", 3000);
+    setTimeout(gameLoopHost, 3000);
+}
+
+function gameLoopHost() {
+    if (STATE.phase === 'lobby' || STATE.phase === 'gameover') return;
+
+    const delta = 0.1;
+    STATE.stageData.timer -= delta;
+
+    if (STATE.phase === 'stage1') updateStage1(delta);
+    else if (STATE.phase === 'stage2') updateStage2(delta);
+    else if (STATE.phase === 'stage3') updateStage3(delta);
+    else if (STATE.phase === 'stage4') updateStage4(delta);
+
+    broadcastState();
+    setTimeout(gameLoopHost, 100);
+}
+
+function updateStage1(delta) {
+    if (STATE.stageData.timer <= 0) { nextStage(); return; }
+    
+    STATE.stageData.darumanTimer -= delta;
+    if (STATE.stageData.darumanTimer <= 0) {
+        if (STATE.stageData.darumanState === 'back') {
+            STATE.stageData.darumanState = 'look';
+            STATE.stageData.darumanTimer = CONFIG.DARUMAN_LOOK_TIME;
+            broadcastEffect('turn');
+        } else {
+            STATE.stageData.darumanState = 'back';
+            STATE.stageData.darumanTimer = CONFIG.DARUMAN_BACK_TIME + Math.random() * 1.5;
+            checkMovementStage1();
+        }
+    }
+
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        if (!p.alive) continue;
+        if (p.input && (p.input.x !== 0 || p.input.z !== 0)) {
+            p.x += p.input.x * CONFIG.MOVE_SPEED;
+            p.z += p.input.z * CONFIG.MOVE_SPEED;
+            p.x = Math.max(-25, Math.min(25, p.x));
+            p.z = Math.max(-35, Math.min(30, p.z));
+            
+            if (STATE.stageData.darumanState === 'back') {
+                p.movedWhileBack = true;
+            }
+            
+            if (p.z <= -25) { p.alive = false; /* Cleared */ }
+        }
+    }
+
+    let aliveCount = Object.values(STATE.players).filter(p => p.alive).length;
+    if (aliveCount === 0) nextStage();
+}
+
+function checkMovementStage1() {
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        if (p.alive && p.movedWhileBack) {
+            eliminatePlayer(pid);
+        }
+        p.movedWhileBack = false;
+    }
+}
+
+function updateStage2(delta) {
+    if (STATE.stageData.timer <= 0) {
+        if (!STATE.stageData.falling) {
+            STATE.stageData.falling = true;
+            resolveStage2();
+        }
+        return;
+    }
+
+    STATE.stageData.teamAForce = 0;
+    STATE.stageData.teamBForce = 0;
+
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        if (!p.alive) continue;
+        if (p.input && p.input.mash > 0) {
+            if (p.team === 'A') STATE.stageData.teamAForce += p.input.mash;
+            else STATE.stageData.teamBForce += p.input.mash;
+            p.input.mash = 0; // Reset per tick
+        }
+    }
+
+    let netForce = (STATE.stageData.teamAForce - STATE.stageData.teamBForce) * 0.01;
+    STATE.stageData.ropePosition += netForce;
+    STATE.stageData.ropePosition = Math.max(-1, Math.min(1, STATE.stageData.ropePosition));
+}
+
+function resolveStage2() {
+    let losingTeam = STATE.stageData.ropePosition > 0 ? 'A' : 'B';
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        if (p.alive && p.team === losingTeam) {
+            eliminatePlayer(pid);
+        }
+    }
+    setTimeout(nextStage, 3000);
+}
+
+function updateStage3(delta) {
+    if (STATE.stageData.timer <= 0) {
+        resolveStage3();
+        return;
+    }
+
+    STATE.stageData.redCount = 0;
+    STATE.stageData.blueCount = 0;
+
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        if (!p.alive) continue;
+        if (p.roomChoice === 'red') STATE.stageData.redCount++;
+        else if (p.roomChoice === 'blue') STATE.stageData.blueCount++;
+    }
+}
+
+function resolveStage3() {
+    let eliminateRoom = null;
+    if (STATE.stageData.redCount > STATE.stageData.blueCount) eliminateRoom = 'red';
+    else if (STATE.stageData.blueCount > STATE.stageData.redCount) eliminateRoom = 'blue';
+    else eliminateRoom = Math.random() > 0.5 ? 'red' : 'blue'; // Tie breaker
+
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        if (p.alive && p.roomChoice === eliminateRoom) {
+            eliminatePlayer(pid);
+        }
+    }
+    setTimeout(nextStage, 3000);
+}
+
+function updateStage4(delta) {
+    if (STATE.stageData.timer <= 0) {
+        resolveStage4();
+        return;
+    }
+}
+
+function resolveStage4() {
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        if (!p.alive || !p.janken) { eliminatePlayer(pid); continue; }
+        
+        let finalHand = p.janken.final === 'left' ? p.janken.left : p.janken.right;
+        if (!finalHand) { eliminatePlayer(pid); continue; }
+
+        let survives = true;
+        for (let takoHand of STATE.stageData.takoHands) {
+            if (isLoose(finalHand, takoHand)) { survives = false; break; }
+        }
+        if (!survives) eliminatePlayer(pid);
+    }
+    setTimeout(endGame, 3000);
+}
+
+function isLoose(player, tako) {
+    if (player === 'rock' && tako === 'paper') return true;
+    if (player === 'paper' && tako === 'scissors') return true;
+    if (player === 'scissors' && tako === 'rock') return true;
+    return false;
+}
+
+function eliminatePlayer(pid) {
+    if (!STATE.players[pid] || !STATE.players[pid].alive) return;
+    STATE.players[pid].alive = false;
+    broadcastEffect('eliminate');
+}
+
+function nextStage() {
+    if (STATE.phase === 'stage1') {
+        STATE.phase = 'stage2';
+        STATE.stageData.timer = CONFIG.STAGE2_TIME;
+        STATE.stageData.ropePosition = 0;
+        STATE.stageData.falling = false;
+        let teams = ['A', 'B'];
+        let i = 0;
+        for (let pid in STATE.players) {
+            if (STATE.players[pid].alive) {
+                STATE.players[pid].team = teams[i % 2];
+                STATE.players[pid].x = STATE.players[pid].team === 'A' ? -15 : 15;
+                STATE.players[pid].z = 0;
+                i++;
+            }
+        }
+        showMessage("STAGE 2: デス綱引き", 3000);
+    } else if (STATE.phase === 'stage2') {
+        STATE.phase = 'stage3';
+        STATE.stageData.timer = CONFIG.STAGE3_TIME;
+        for (let pid in STATE.players) {
+            if (STATE.players[pid].alive) {
+                STATE.players[pid].roomChoice = null;
+                STATE.players[pid].x = 0;
+                STATE.players[pid].z = 0;
+            }
+        }
+        showMessage("STAGE 3: 赤青ルーム", 3000);
+    } else if (STATE.phase === 'stage3') {
+        STATE.phase = 'stage4';
+        STATE.stageData.timer = CONFIG.STAGE4_TIME;
+        const hands = ['rock', 'paper', 'scissors'];
+        STATE.stageData.takoHands = [hands[Math.floor(Math.random()*3)], hands[Math.floor(Math.random()*3)]];
+        while(STATE.stageData.takoHands[0] === STATE.stageData.takoHands[1]) {
+            STATE.stageData.takoHands[1] = hands[Math.floor(Math.random()*3)];
+        }
+        for (let pid in STATE.players) {
+            if (STATE.players[pid].alive) {
+                STATE.players[pid].janken = { left: null, right: null, final: null };
+            }
+        }
+        showMessage("FINAL STAGE: じゃんけん", 3000);
+    } else if (STATE.phase === 'stage4') {
+        endGame();
+    }
+    broadcastState();
+}
+
+function endGame() {
+    STATE.phase = 'gameover';
+    broadcastState();
+    const resultUi = document.getElementById('result-ui');
+    const resultText = document.getElementById('result-text');
+    const myP = STATE.players[STATE.myId];
+    if (myP && myP.alive) {
+        resultText.innerText = "生存";
+        resultText.className = "survived";
+    } else {
+        resultText.innerText = "脱落";
+        resultText.className = "eliminated";
+    }
+    document.getElementById('game-hud').style.display = 'none';
+    resultUi.style.display = 'flex';
+}
+
+function broadcastEffect(effectName) {
+    if (!STATE.isHost) return;
+    const payload = { type: 'effect', effect: effectName };
+    for (let conn of STATE.connections) { if (conn.open) conn.send(payload); }
+    triggerEffect(effectName);
+}
+
+// ==========================================
+// Client Update & Rendering
+// ==========================================
+function updateFromHost(state) {
+    STATE.phase = state.phase;
+    STATE.stageData = state.stageData;
+    
+    for (let pid in state.players) {
+        const sp = state.players[pid];
+        if (!STATE.players[pid]) STATE.players[pid] = {};
+        Object.assign(STATE.players[pid], sp);
+        STATE.players[pid].isMe = sp.isMe || pid === STATE.myId;
+    }
+
+    for (let pid in STATE.players) { if (!state.players[pid]) delete STATE.players[pid]; }
+
+    updateHUD();
+    updateStageUI();
+}
+
+function updateHUD() {
+    const maxTime = STATE.phase === 'stage1' ? CONFIG.STAGE1_TIME : STATE.phase === 'stage2' ? CONFIG.STAGE2_TIME : STATE.phase === 'stage3' ? CONFIG.STAGE3_TIME : CONFIG.STAGE4_TIME;
+    const fill = document.getElementById('timer-fill');
+    if (fill) fill.style.width = `${Math.max(0, (STATE.stageData.timer / maxTime) * 100)}%`;
+
+    let aliveCount = Object.values(STATE.players).filter(p => p.alive).length;
+    const countEl = document.getElementById('alive-count');
+    if (countEl) countEl.innerText = `生存: ${aliveCount} / ${CONFIG.MAX_PLAYERS}`;
+
+    const stageInfo = document.getElementById('stage-info');
+    if (stageInfo) {
+        if (STATE.phase === 'stage1') stageInfo.innerText = 'STAGE 1: だるまさんが転んだ';
+        else if (STATE.phase === 'stage2') stageInfo.innerText = 'STAGE 2: デス綱引き';
+        else if (STATE.phase === 'stage3') stageInfo.innerText = 'STAGE 3: 赤青ルーム';
+        else if (STATE.phase === 'stage4') stageInfo.innerText = 'FINAL: じゃんけん';
+        else stageInfo.innerText = '';
+    }
+}
+
+function updateStageUI() {
+    document.getElementById('stage2-ui').style.display = STATE.phase === 'stage2' ? 'block' : 'none';
+    document.getElementById('stage3-ui').style.display = STATE.phase === 'stage3' ? 'block' : 'none';
+    document.getElementById('stage4-ui').style.display = STATE.phase === 'stage4' ? 'block' : 'none';
+
+    if (STATE.phase === 'stage2') {
+        const marker = document.getElementById('rope-marker');
+        if (marker) marker.style.left = `${50 + STATE.stageData.ropePosition * 40}%`;
+        const myP = STATE.players[STATE.myId];
+        const teamInfo = document.getElementById('team-info');
+        if (teamInfo && myP) teamInfo.innerText = `Team: ${myP.team || '-'}`;
+    }
+
+    if (STATE.phase === 'stage3') {
+        const counts = document.getElementById('room-counts');
+        if (counts) counts.innerText = `赤: ${STATE.stageData.redCount} / 青: ${STATE.stageData.blueCount}`;
+        
+        const myP = STATE.players[STATE.myId];
+        if (myP) {
+            document.getElementById('btn-red').classList.toggle('selected', myP.roomChoice === 'red');
+            document.getElementById('btn-blue').classList.toggle('selected', myP.roomChoice === 'blue');
+        }
+    }
+
+    if (STATE.phase === 'stage4') {
+        const takoHands = document.getElementById('tako-hands');
+        if (takoHands) {
+            const icons = { rock: '✊', paper: '✋', scissors: '✌️' };
+            takoHands.innerText = STATE.stageData.takoHands.map(h => icons[h]).join(' vs ');
+        }
+
+        const myP = STATE.players[STATE.myId];
+        if (myP && myP.janken) {
+            document.querySelectorAll('.janken-hand').forEach(el => {
+                const slot = el.dataset.slot;
+                const hand = el.dataset.hand;
+                el.classList.toggle('selected', myP.janken[slot] === hand);
+            });
+
+            const finalDiv = document.getElementById('final-decision');
+            if (finalDiv) {
+                finalDiv.style.display = (myP.janken.left && myP.janken.right && STATE.stageData.timer <= 1) ? 'block' : 'none';
+                document.getElementById('btn-final-left').classList.toggle('selected', myP.janken.final === 'left');
+                document.getElementById('btn-final-right').classList.toggle('selected', myP.janken.final === 'right');
+            }
+        }
+    }
+}
+
+function showMessage(text, duration) {
+    const el = document.getElementById('message-overlay');
+    el.innerText = text;
+    el.style.opacity = 1;
+    setTimeout(() => { el.style.opacity = 0; }, duration);
+}
+
+// ==========================================
+// Main Render Loop
+// ==========================================
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+
+    // Daruman Animation
+    if (darumanHead) {
+        const targetRot = STATE.stageData.darumanState === 'look' ? 0 : Math.PI;
+        darumanHead.rotation.y += (targetRot - darumanHead.rotation.y) * 0.1;
+        
+        const eyeIntensity = STATE.stageData.darumanState === 'look' ? 2.0 : 0;
+        darumanEyeLight.intensity += (eyeIntensity - darumanEyeLight.intensity) * 0.1;
+        darumanHead.children.forEach(c => {
+            if (c.material && c.material.emissiveIntensity !== undefined) {
+                c.material.emissiveIntensity += (eyeIntensity - c.material.emissiveIntensity) * 0.1;
+            }
+        });
+    }
+
+    // Player Meshes
+    for (let pid in STATE.players) {
+        const p = STATE.players[pid];
+        const mesh = playerMeshes[p.id];
+        if (!mesh) continue;
+
+        if (p.alive) {
+            mesh.visible = true;
+            mesh.position.x += (p.x - mesh.position.x) * 0.2;
+            mesh.position.z += (p.z - mesh.position.z) * 0.2;
+            
+            if (STATE.phase === 'stage2' && STATE.stageData.falling && p.team === (STATE.stageData.ropePosition > 0 ? 'A' : 'B')) {
+                mesh.velocity.y -= 0.05;
+                mesh.position.y += mesh.velocity.y;
+                if (mesh.position.y < -20) {
+                    emitInk(mesh.position.x, -20, mesh.position.z, 50, new THREE.Color(0x800080));
+                    mesh.visible = false;
+                }
+            } else {
+                mesh.position.y = 1;
+                mesh.velocity.y = 0;
+            }
+        } else {
+            mesh.visible = false;
+        }
+    }
+
+    // Stage Specific Visuals
+    if (STATE.phase === 'stage2') {
+        ropeMesh.visible = true;
+        floorLeft.visible = true;
+        floorRight.visible = true;
+        ropeMesh.position.x = STATE.stageData.ropePosition * 15;
+
+        if (STATE.stageData.falling) {
+            let losingTeam = STATE.stageData.ropePosition > 0 ? 'A' : 'B';
+            if (losingTeam === 'A') {
+                floorLeft.rotation.x += (Math.PI / 2 - floorLeft.rotation.x) * 0.1;
+                floorLeft.position.y -= 0.1;
+            } else {
+                floorRight.rotation.x += (-Math.PI / 2 - floorRight.rotation.x) * 0.1;
+                floorRight.position.y -= 0.1;
+            }
+        }
+    } else {
+        ropeMesh.visible = false;
+        floorLeft.visible = false;
+        floorRight.visible = false;
+    }
+
+    if (STATE.phase === 'stage3') {
+        redRoomZone.visible = true;
+        blueRoomZone.visible = true;
+        
+        // Lasers
+        if (STATE.stageData.timer <= 0) {
+            laserMeshes.forEach((laser, i) => {
+                laser.material.opacity = 0.8;
+                laser.position.x = (Math.random() - 0.5) * 40;
+                laser.position.z = (Math.random() - 0.5) * 40;
+            });
+        } else {
+            laserMeshes.forEach(laser => laser.material.opacity = 0);
+        }
+    } else {
+        redRoomZone.visible = false;
+        blueRoomZone.visible = false;
+        laserMeshes.forEach(laser => laser.material.opacity = 0);
+    }
+
+    if (STATE.phase === 'stage4') {
+        if (STATE.stageData.timer <= 0) {
+            thunderMesh.material.opacity = 0.8;
+            thunderMesh.position.x = (Math.random() - 0.5) * 20;
+            thunderMesh.position.z = (Math.random() - 0.5) * 20;
+        } else {
+            thunderMesh.material.opacity = 0;
+        }
+    } else {
+        thunderMesh.material.opacity = 0;
+    }
+
+    // Camera Follow
+    const myP = STATE.players[STATE.myId];
+    if (myP && STATE.phase !== 'lobby') {
+        let targetX = myP.x * 0.5;
+        let targetZ = myP.z + 15;
+        if (STATE.phase === 'stage2') { targetX = 0; targetZ = 20; camera.position.set(0, 15, 30); camera.lookAt(0, 0, 0); }
+        else if (STATE.phase === 'stage3') { targetX = 0; targetZ = 20; camera.position.set(0, 20, 30); camera.lookAt(0, 0, 0); }
+        else if (STATE.phase === 'stage4') { targetX = 0; targetZ = 10; camera.position.set(0, 5, 15); camera.lookAt(0, 5, -30); }
+        else {
+            camera.position.x += (targetX - camera.position.x) * 0.05;
+            camera.position.z += (targetZ - camera.position.z) * 0.05;
+            camera.lookAt(myP.x, 2, myP.z - 10);
+        }
+    }
+
+    updateParticles(delta);
+    renderer.render(scene, camera);
+}
+
+// ==========================================
+// Input Handling
+// ==========================================
+const keys = {};
+window.addEventListener('keydown', (e) => { 
+    keys[e.code] = true; 
+    if (e.code === 'Space' && STATE.phase === 'stage2') {
+        STATE.myInput.mash = (STATE.myInput.mash || 0) + 1;
+        sendInput();
+    }
+});
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+function processInput() {
+    if (STATE.phase === 'stage1' || STATE.phase === 'stage3') {
+        let ix = 0, iz = 0;
+        if (keys['KeyW'] || keys['ArrowUp']) iz = -1;
+        if (keys['KeyS'] || keys['ArrowDown']) iz = 1;
+        if (keys['KeyA'] || keys['ArrowLeft']) ix = -1;
+        if (keys['KeyD'] || keys['ArrowRight']) ix = 1;
+
+        const len = Math.sqrt(ix*ix + iz*iz);
+        if (len > 0) { ix /= len; iz /= len; }
+
+        STATE.myInput.x = ix;
+        STATE.myInput.z = iz;
+
+        if (STATE.isHost) {
+            const myP = STATE.players[STATE.myId];
+            if (myP && myP.alive) {
+                myP.x += ix * CONFIG.MOVE_SPEED;
+                myP.z += iz * CONFIG.MOVE_SPEED;
+                myP.x = Math.max(-25, Math.min(25, myP.x));
+                myP.z = Math.max(-35, Math.min(30, myP.z));
+                
+                if (STATE.phase === 'stage3') {
+                    if (myP.x < -5) myP.roomChoice = 'red';
+                    else if (myP.x > 5) myP.roomChoice = 'blue';
+                    else myP.roomChoice = null;
+                }
+            }
+        } else {
+            sendInput();
+        }
+    }
+    requestAnimationFrame(processInput);
+}
+
+// UI Events for Stages
+document.getElementById('btn-red').addEventListener('click', () => {
+    if (STATE.phase === 'stage3') {
+        STATE.myInput.roomChoice = 'red';
+        if (STATE.isHost) STATE.players[STATE.myId].roomChoice = 'red';
+        sendInput();
+    }
+});
+document.getElementById('btn-blue').addEventListener('click', () => {
+    if (STATE.phase === 'stage3') {
+        STATE.myInput.roomChoice = 'blue';
+        if (STATE.isHost) STATE.players[STATE.myId].roomChoice = 'blue';
+        sendInput();
+    }
+});
+
+document.querySelectorAll('.janken-hand').forEach(el => {
+    el.addEventListener('click', () => {
+        if (STATE.phase === 'stage4' && STATE.stageData.timer > 1) {
+            const slot = el.dataset.slot;
+            const hand = el.dataset.hand;
+            if (!STATE.myInput.janken) STATE.myInput.janken = { left: null, right: null, final: null };
+            STATE.myInput.janken[slot] = hand;
+            if (STATE.isHost) {
+                if (!STATE.players[STATE.myId].janken) STATE.players[STATE.myId].janken = { left: null, right: null, final: null };
+                STATE.players[STATE.myId].janken[slot] = hand;
+            }
+            sendInput();
+        }
+    });
+});
+
+document.getElementById('btn-final-left').addEventListener('click', () => {
+    if (STATE.phase === 'stage4' && STATE.stageData.timer <= 1) {
+        if (!STATE.myInput.janken) STATE.myInput.janken = { left: null, right: null, final: null };
+        STATE.myInput.janken.final = 'left';
+        if (STATE.isHost) STATE.players[STATE.myId].janken.final = 'left';
+        sendInput();
+    }
+});
+document.getElementById('btn-final-right').addEventListener('click', () => {
+    if (STATE.phase === 'stage4' && STATE.stageData.timer <= 1) {
+        if (!STATE.myInput.janken) STATE.myInput.janken = { left: null, right: null, final: null };
+        STATE.myInput.janken.final = 'right';
+        if (STATE.isHost) STATE.players[STATE.myId].janken.final = 'right';
+        sendInput();
+    }
+});
+
+// ==========================================
+// Initialization & UI Listeners
+// ==========================================
+document.getElementById('btn-host').addEventListener('click', () => {
+    document.getElementById('lobby-ui').innerHTML = '<h1>接続中...</h1><p>4桁ルーム番号を生成中</p>';
+    initPeer(true);
+    setTimeout(() => {
+        document.getElementById('lobby-ui').innerHTML = `
+            <h1>ルーム作成済み</h1>
+            <p>部屋番号: <span style="font-size: 3rem; color: var(--pink);">${STATE.roomId}</span></p>
+            <p>参加者を待っています... (最大30人)</p>
+            <button class="btn pink" id="btn-start-game">ゲーム開始</button>
+        `;
+        document.getElementById('btn-start-game').addEventListener('click', startGame);
+    }, 2000);
+});
+
+document.getElementById('btn-join').addEventListener('click', () => {
+    document.getElementById('lobby-ui').innerHTML = '<h1>接続中...</h1><p>PeerJSサーバーに接続中</p>';
+    initPeer(false);
+});
+
+document.getElementById('btn-restart').addEventListener('click', () => location.reload());
+
+initThree();
+animate();
+processInput();
+
+</script>
+</body>
+</html>
